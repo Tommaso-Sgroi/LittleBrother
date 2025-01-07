@@ -172,3 +172,8 @@ cython_debug/
 
 # macOS Resource Fork
 .DS_Store
+.idea
+*.pt
+
+# Detection results
+detection_results
