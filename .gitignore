@@ -177,3 +177,5 @@ cython_debug/
 
 # Detection results
 detection_results
+
+*.mp4
