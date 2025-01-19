@@ -1,9 +1,9 @@
 
 # System Flow Roadmap
 
-- [] Motion detection 
-- [] Motion BBox  
-- [] People detection
+- [x] Motion detection 
+- [x] Motion BBox  
+- [x] People detection
 - [] Face detection
 - [] Face recognition
 - [] Take the appropriate action
