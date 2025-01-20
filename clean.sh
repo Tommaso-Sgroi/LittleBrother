@@ -40,13 +40,10 @@ if [ "$clean_metadata" = true ]; then
     CONVERT_OPTS="$CONVERT_OPTS --ClearMetadataPreprocessor.enabled=True"
 fi
 
-cat "$NOTEBOOK" | jupyter nbconvert \
+jupyter nbconvert \
     $CONVERT_OPTS \
     --to=notebook \
-    --stdin \
-    --stdout \
-    --log-level=ERROR > "${NOTEBOOK}.cleaned"
-
-mv "${NOTEBOOK}.cleaned" "$NOTEBOOK"
+    --inplace \
+    --log-level=ERROR "$NOTEBOOK"
 
 echo "Notebook '$NOTEBOOK' has been cleaned."
