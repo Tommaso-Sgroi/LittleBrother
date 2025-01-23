@@ -179,3 +179,4 @@ cython_debug/
 detection_results
 
 *.mp4
+WiseNET

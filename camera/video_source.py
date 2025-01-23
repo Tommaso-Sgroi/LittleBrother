@@ -1,7 +1,7 @@
 from .frame_source import FrameSource
 import cv2 as cv
 from multiprocessing import Queue
-
+from .utils import rate_limit
 
 class VideoSource(FrameSource):
 
@@ -12,6 +12,7 @@ class VideoSource(FrameSource):
         self.timeout = timeout
         super().__init__(id, stream=None, daemon=False)
 
+    @rate_limit(30)
     def read(self):
         return self.stream.read()
 
@@ -28,7 +29,7 @@ class VideoSource(FrameSource):
         try:
             while True:
                 frame = self.next()
-                self.queue.put([frame], timeout=self.timeout)
+                self.queue.put([(self.id, frame)], timeout=self.timeout)
         except StopIteration:
             print(f'stopped id {self.id}, {self.video_path}')
             return 0

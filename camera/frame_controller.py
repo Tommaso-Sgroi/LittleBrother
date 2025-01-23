@@ -1,6 +1,9 @@
 from multiprocessing import Queue
 from queue import Empty
 from threading import Thread, Lock
+from typing import List, Any
+
+import numpy as np
 
 from .frame_source import FrameSource
 
@@ -49,15 +52,16 @@ class FrameController(Thread):
 
         while self._alive_counter() > 0:
             try:
-                remote_frame = self.fifo_queue.get(timeout=timeout)
-                self.buffer.append(remote_frame)
+                remote_frames = self.fifo_queue.get(timeout=timeout)
+                self.buffer.append(remote_frames)
             except Empty as e:
                 print(f'Frame controller: queue is empty')
         return 1
 
-    def get_frames(self):
+    def get_frames(self) -> list[tuple[str, Any]]:
+        """returns the frame source id (See VideoSource) and the frame np.array"""
         return [
-            frame.pop() # de-encapsulate the frames
+            frame.pop() # de-encapsulate the frames -> (frame_source_id, frame)
             for frame in self.buffer.get(flush=True)
         ]
 
