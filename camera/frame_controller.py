@@ -59,7 +59,7 @@ class FrameController(Thread):
         return 1
 
     def get_frames(self) -> list[tuple[str, Any]]:
-        """returns the frame source id (See VideoSource) and the frame np.array"""
+        """returns a list of: the frame source id (See VideoSource) and the frame np.array"""
         return [
             frame.pop() # de-encapsulate the frames -> (frame_source_id, frame)
             for frame in self.buffer.get(flush=True)
