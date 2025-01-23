@@ -4,11 +4,35 @@ import cv2 as cv
 import numpy as np
 from cv2 import Mat
 from numpy import ndarray
+
 from utils.bbox_utils import merge_overlapping_detections
 
 
-def detect_moving_objects(frame: np.ndarray, background_subtractor: cv.BackgroundSubtractor,
-                          area_threshold: int = 100) -> tuple[list[list[int]], Mat | ndarray]:
+class MotionDetector:
+    def __init__(self, area_threshold=700, overlap_threshold=0.3):
+        self.area_threshold = area_threshold
+        self.overlap_threshold = overlap_threshold
+        self.back_sub = cv.createBackgroundSubtractorMOG2(detectShadows=False)
+
+    def process_frame(self, frame: np.ndarray, draw=False):
+        detections, merged_detections, processed_frame = mog2_movement_detection(
+            frame,
+            background_subtractor=self.back_sub,
+            area_threshold=self.area_threshold,
+            overlap_threshold=self.overlap_threshold,
+            draw=draw,
+        )
+        return detections, merged_detections, processed_frame
+
+    def __call__(self, frame: np.ndarray, draw=False):
+        return self.process_frame(frame, draw=draw)
+
+
+def detect_moving_objects(
+        frame: np.ndarray,
+        background_subtractor: cv.BackgroundSubtractor,
+        area_threshold: int = 100,
+) -> tuple[list[list[int]], Mat | ndarray]:
     """
     Detects moving objects using a background subtractor, returns their bounding boxes.
 
@@ -37,10 +61,17 @@ def detect_moving_objects(frame: np.ndarray, background_subtractor: cv.Backgroun
     return detections, fg_mask
 
 
-def mog2_movement_detection(frame: np.ndarray, *, background_subtractor: cv.BackgroundSubtractor,
-                            area_threshold: int = 100, overlap_threshold=0.0, draw=False) -> tuple[
-    Any, list, np.ndarray]:
-    detections, _ = detect_moving_objects(frame, background_subtractor, area_threshold=area_threshold)
+def mog2_movement_detection(
+        frame: np.ndarray,
+        *,
+        background_subtractor: cv.BackgroundSubtractor,
+        area_threshold: int = 100,
+        overlap_threshold=0.0,
+        draw=False,
+) -> tuple[Any, list, np.ndarray]:
+    detections, _ = detect_moving_objects(
+        frame, background_subtractor, area_threshold=area_threshold
+    )
     merged_detections = merge_overlapping_detections(detections, overlap_threshold)
 
     # Draw bounding boxes
