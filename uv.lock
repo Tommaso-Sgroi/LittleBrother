@@ -244,6 +244,7 @@ name = "computervision"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "facenet-pytorch" },
     { name = "ipykernel" },
     { name = "notebook" },
     { name = "pillow" },
@@ -253,6 +254,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "facenet-pytorch", specifier = ">=2.5.3" },
     { name = "ipykernel", specifier = ">=6.29.5" },
     { name = "notebook", specifier = ">=7.3.2" },
     { name = "pillow", specifier = ">=11.1.0" },
@@ -352,6 +354,21 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/8c/e3/7d45f492c2c4a0e8e0fad57d081a7c8a0286cdd86372b070cca1ec0caa1e/executing-2.1.0.tar.gz", hash = "sha256:8ea27ddd260da8150fa5a708269c4a10e76161e2496ec3e587da9e3c0fe4b9ab", size = 977485 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b5/fd/afcd0496feca3276f509df3dbd5dae726fcc756f1a08d9e25abe1733f962/executing-2.1.0-py2.py3-none-any.whl", hash = "sha256:8d63781349375b5ebccc3142f4b30350c0cd9c79f921cde38be2be4637e98eaf", size = 25805 },
+]
+
+[[package]]
+name = "facenet-pytorch"
+version = "2.5.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pillow" },
+    { name = "requests" },
+    { name = "torchvision" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/80/cd/29d55c5d8675c7f8892c9b79288b633cd97b276d8fb24952f1e74fb7bfcc/facenet-pytorch-2.5.3.tar.gz", hash = "sha256:98cc5b42a48f837c023eb92f2a571cd4ac6a46687c5e71b9e99b491087273e2b", size = 1885286 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/40/c1/0a15058f478c8f0f29cacb6e35530b97ead780be99737e62810e71dc477e/facenet_pytorch-2.5.3-py3-none-any.whl", hash = "sha256:b8002c3ee7a3af471c433cbda1fdcab9ae2d46a4aac43435ba08259c45ffc884", size = 1882784 },
 ]
 
 [[package]]
