@@ -88,11 +88,11 @@ class FaceRecognizer:
             np.array(self.enrolled_labels, dtype=object),
         )
 
-    def recognize_faces(self, image):
+    def recognize_faces(self, image) -> np.ndarray:
         """
         Recognize faces in an image.
         Args:
-            image: A PIL Image
+            image: One or more PIL Images
         Returns:
             A list of tuples containing the label and cosine similarity score for each recognized face
         """
@@ -101,7 +101,16 @@ class FaceRecognizer:
         if faces is None:
             raise ValueError("No faces detected in image")
 
+        faces = np.array(faces)
+        original_dim = faces.shape
+
+        if len(faces.shape) == 5:
+            # a batch of images
+            faces = faces.reshape(-1, *original_dim[2:])
+
+        faces = torch.tensor(faces, dtype=torch.float)
         embeddings = self.resnet(faces)
+
         results = []
 
         similarities = F.cosine_similarity(
@@ -115,5 +124,10 @@ class FaceRecognizer:
                 continue
 
             results.append((self.enrolled_labels[idx], max_similarity.item()))
+
+        results = np.array(results)
+
+        if len(original_dim) == 5:
+            results = results.reshape(original_dim[0], original_dim[1], 2)
 
         return results
