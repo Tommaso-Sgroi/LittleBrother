@@ -1,3 +1,5 @@
+import queue
+
 from .frame_source import FrameSource
 import cv2 as cv
 from multiprocessing import Queue
@@ -29,7 +31,11 @@ class VideoSource(FrameSource):
         try:
             while True:
                 frame = self.next()
-                self.queue.put([(self.id, frame)], timeout=self.timeout)
+                try:
+                    self.queue.put([(self.id, frame)], timeout=self.timeout)
+                except queue.Full:
+                    print(f'Video Source #{self.id}:Queue full')
+
         except StopIteration:
             print(f'stopped id {self.id}, {self.video_path}')
             return 0
