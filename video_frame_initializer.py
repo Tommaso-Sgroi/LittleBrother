@@ -5,9 +5,9 @@ from camera.frame_controller import FrameController
 from camera.video_source import VideoSource
 
 
-def initializer(video_paths: list, timeout=0.1) -> FrameController:
+def initializer(video_paths: list, max_queue_size = 1024, timeout=0.1) -> FrameController:
     video_sources = []
-    fifo_queue = Queue()
+    fifo_queue = Queue(maxsize=max_queue_size)
 
     for video_path in video_paths:
         video_id = os.path.basename(video_path)
@@ -16,7 +16,7 @@ def initializer(video_paths: list, timeout=0.1) -> FrameController:
         video_sources.append(video_frame_source)
 
     frame_controller = FrameController(video_sources, fifo_queue=fifo_queue)
-    return frame_controller, fifo_queue
+    return frame_controller
 
 
 def view(frame, *, scale=0.5, window_name='Frame'):
@@ -42,7 +42,7 @@ WiseNET/wisenet_dataset/video_sets/set_1/video1_3.avi
 WiseNET/wisenet_dataset/video_sets/set_1/video1_4.avi
 WiseNET/wisenet_dataset/video_sets/set_1/video1_5.avi""".split('\n')
 
-    controller, queue = initializer(videos, timeout=0.1)
+    controller = initializer(videos, timeout=0.1, max_queue_size=100)
     # controller = initializer(['WiseNET/wisenet_dataset/video_sets/set_1/video1_1.avi'])
 
     # test video source
@@ -59,11 +59,12 @@ WiseNET/wisenet_dataset/video_sets/set_1/video1_5.avi""".split('\n')
 
     controller.start()
     from time import sleep
+    i = 0
     while True:
         sleep(1)
         frames = controller.get_frames()
-        for frame in frames:
-            view(frame)
+        for video_id, frame in frames:
+            view(frame, window_name=video_id)
 
         if len(frames) == 0:
             break
