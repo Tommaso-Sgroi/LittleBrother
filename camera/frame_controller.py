@@ -29,9 +29,9 @@ class FrameController(Thread):
 
         def get(self, *, flush=False):
             with self.mutex_lock:
-                buffer = self._buffer.copy()
+                buffer = self._buffer
                 if flush:
-                    self._buffer.clear()
+                    self._buffer = []
                 return buffer
 
 
