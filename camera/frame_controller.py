@@ -1,9 +1,7 @@
 from multiprocessing import Queue
 from queue import Empty
 from threading import Thread, Lock
-from typing import List, Any
-
-import numpy as np
+from numpy import ndarray
 
 from .frame_source import FrameSource
 
@@ -58,7 +56,7 @@ class FrameController(Thread):
                 print(f'Frame controller: queue is empty')
         return 1
 
-    def get_frames(self) -> list[tuple[str, Any]]:
+    def get_frames(self) -> list[tuple[str, ndarray]]:
         """returns a list of: the frame source id (See VideoSource) and the frame np.array"""
         return [
             frame.pop() # de-encapsulate the frames -> (frame_source_id, frame)
