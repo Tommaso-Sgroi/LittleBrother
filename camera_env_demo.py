@@ -1,4 +1,5 @@
-from camera.video_frame_initializer import initializer, view
+from camera.video_frame_initializer import initializer
+from utils.view import view
 
 if __name__ == '__main__':
 
@@ -33,7 +34,7 @@ if __name__ == '__main__':
         sleep(1)
         frames = controller.get_frames()
         for video_id, frame in frames:
-            view(frame, window_name=video_id)
+            view(frame, winname=video_id)
 
         if len(frames) == 0:
             break

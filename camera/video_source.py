@@ -14,7 +14,7 @@ class VideoSource(FrameSource):
         self.timeout = timeout
         super().__init__(id, stream=None, daemon=False)
 
-    @rate_limit(30)
+    @rate_limit(15)
     def read(self):
         return self.stream.read()
 
