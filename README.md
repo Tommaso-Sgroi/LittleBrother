@@ -10,4 +10,4 @@
 - [x] Divide the system in modules
 - [ ] Design the multiprocess pipeline
 - [ ] Implement the pipeline
-- [ ] Simulate the Camera Network Environment
+- [x] Simulate the Camera Network Environment
