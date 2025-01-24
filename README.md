@@ -7,7 +7,7 @@
 - [ ] Face detection (to integrate)
 - [ ] Face recognition (to integrate)
 - [ ] Take the appropriate action
-- [ ] Divide the system in modules
+- [x] Divide the system in modules
 - [ ] Design the multiprocess pipeline
 - [ ] Implement the pipeline
 - [ ] Simulate the Camera Network Environment
