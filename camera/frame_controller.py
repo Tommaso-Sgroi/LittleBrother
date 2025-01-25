@@ -11,8 +11,10 @@ class FrameController(Thread):
     Get frames from the frame sources Queue into a buffer.
     This is a thread which parses the frames from the queue into the buffer.
     """
+
     class Buffer:
         """Thread safe buffer list"""
+
         def __init__(self):
             self._buffer = []
             self.mutex_lock = Lock()
@@ -31,7 +33,6 @@ class FrameController(Thread):
                 if flush:
                     self._buffer = []
                 return buffer
-
 
     def __init__(self, sources: list[FrameSource], fifo_queue: Queue):
         super().__init__()
@@ -59,7 +60,7 @@ class FrameController(Thread):
     def get_frames(self) -> list[tuple[str, ndarray]]:
         """returns a list of: the frame source id (See VideoSource) and the frame np.array"""
         return [
-            frame.pop() # de-encapsulate the frames -> (frame_source_id, frame)
+            frame.pop()  # de-encapsulate the frames -> (frame_source_id, frame)
             for frame in self.buffer.get(flush=True)
         ]
 
