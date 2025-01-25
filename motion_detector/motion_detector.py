@@ -6,10 +6,12 @@ from cv2 import Mat
 from numpy import ndarray
 
 from utils.bbox_utils import merge_overlapping_detections
+from utils.logger import Logger
 
 
-class MotionDetector:
+class MotionDetector(Logger):
     def __init__(self, area_threshold=700, overlap_threshold=0.3):
+        super().__init__(self.__class__.__name__)
         self.area_threshold = area_threshold
         self.overlap_threshold = overlap_threshold
         self.back_sub = cv.createBackgroundSubtractorMOG2(detectShadows=False)
@@ -22,6 +24,7 @@ class MotionDetector:
             overlap_threshold=self.overlap_threshold,
             draw=draw,
         )
+        self.logger.debug('number of detections: %s; number of merged detections: %s', len(detections), len(merged_detections))
         return detections, merged_detections, processed_frame
 
     def __call__(self, frame: np.ndarray, draw=False):
