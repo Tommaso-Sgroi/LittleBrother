@@ -6,18 +6,22 @@ import torch.nn.functional as F
 from PIL import Image
 from facenet_pytorch import MTCNN, InceptionResnetV1
 
+from utils.logger import Logger
+
 
 def print_in_red(text):
     print("\033[91m {}\033[00m".format(text))
 
 
-class FaceRecognizer:
+class FaceRecognizer(Logger):
     def __init__(self, threshold: float = 0.8):
         """
         Initialize the face recognizer.
         Args:
             threshold: The cosine similarity threshold for face recognition.
         """
+
+        Logger.__init__(self, name=f"{self.__class__.__name__}")
 
         os.makedirs("registered_faces", exist_ok=True)
         self.mtcnn = MTCNN(keep_all=True)
@@ -53,17 +57,17 @@ class FaceRecognizer:
 
         for image, img_label in zip(images, label):
             if img_label in self.enrolled_labels and not overwrite:
-                print_in_red(
-                    f"Label '{img_label}' already exists. Skipping enrollment."
-                )
+                self.logger.info(f"Label '{img_label}' already exists. Skipping enrollment.")
                 continue
 
             faces = self.mtcnn(image)
 
             if faces is None:
+                self.logger.error("No faces detected in image")
                 raise ValueError("No faces detected in image")
 
             if len(faces) > 1:
+                self.logger.error("Multiple faces detected in image.")
                 raise ValueError(
                     "Multiple faces detected in image. Please provide an image with exactly one face."
                 )
@@ -99,13 +103,15 @@ class FaceRecognizer:
         faces = self.mtcnn(image)
 
         if faces is None:
-            raise ValueError("No faces detected in image")
+            self.logger.info("No faces detected in image")
+            return np.array([])
 
         faces = np.array(faces)
         original_dim = faces.shape
 
         if len(faces.shape) == 5:
             # a batch of images
+            self.logger.info("Batch of images detected")
             faces = faces.reshape(-1, *original_dim[2:])
 
         faces = torch.tensor(faces, dtype=torch.float)
