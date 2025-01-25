@@ -4,11 +4,11 @@ from utils.view import view
 if __name__ == '__main__':
 
     videos = \
-        """WiseNET/wisenet_dataset/video_sets/set_1/video1_1.avi
-        WiseNET/wisenet_dataset/video_sets/set_1/video1_2.avi
-        WiseNET/wisenet_dataset/video_sets/set_1/video1_3.avi
-        WiseNET/wisenet_dataset/video_sets/set_1/video1_4.avi
-        WiseNET/wisenet_dataset/video_sets/set_1/video1_5.avi""".split('\n')
+        """../datasets/WiseNET/wisenet_dataset/video_sets/set_1/video1_1.avi
+        ../datasets/WiseNET/wisenet_dataset/video_sets/set_1/video1_2.avi
+        ../datasets/WiseNET/wisenet_dataset/video_sets/set_1/video1_3.avi
+        ../datasets/WiseNET/wisenet_dataset/video_sets/set_1/video1_4.avi
+        ../datasets/WiseNET/wisenet_dataset/video_sets/set_1/video1_5.avi""".split('\n')
 
     videos = [video.strip() for video in videos]
 
