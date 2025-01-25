@@ -20,17 +20,19 @@ class PeopleDetector(YOLO):
         [ 93, 102, 103],
     """
 
-    def __init__(self, model_name, threshold=0.25, **kwargs):
+    def __init__(self, model_name, threshold=0.25, verbose=False, **kwargs):
         super().__init__(model_name, **kwargs)
         self.focus_on_classes = [0]
         self.threshold = threshold
+        self.verbose = verbose
 
     def detect(self, frame: np.ndarray) -> tuple[Any, Any, Any]:
         """
         :param frame: frame in which detect people
         :return: a np.array of the confidences scores, a np.array of the bounding box coordinates, and the result obj
         """
-        results = self(frame, classes=self.focus_on_classes, conf=self.threshold, device=self.device)[
+        results = \
+        self(frame, classes=self.focus_on_classes, conf=self.threshold, device=self.device, verbose=self.verbose)[
             0]  # list of 1 Results object, because we can predict in batches (for video only)
         """
         cls: tensor([0., 0., 0., 0., 0., 0.], device='cuda:0')
