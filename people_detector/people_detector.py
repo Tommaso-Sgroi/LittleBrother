@@ -49,13 +49,14 @@ class PeopleDetector(YOLO, Logger):
             [1512.9242,  217.1133,  132.6541,  321.3105]
         ])
         """
-        # print(results)
         probs, bboxes = results.boxes.conf, results.boxes.xywh
-        probs = probs.cpu()
-        bboxes = bboxes.cpu()
-
-        self.logger.debug('%s people found', len(probs))
-        return probs.numpy(), bboxes.numpy(), results
+        probs = probs.cpu().numpy()
+        bboxes = bboxes.cpu().numpy()
+        if len(probs) > 0:
+            self.logger.debug('%s people found with accuracy %s', str(len(probs)), ", ".join(f"{p:.3f}" for p in probs.tolist()))
+        else:
+            self.logger.debug('no person has been detected')
+        return probs, bboxes, results
 
     def detect_on_frames(self, frames: list[np.ndarray]) -> list[tuple[Any, Any, Any]]:
         return [

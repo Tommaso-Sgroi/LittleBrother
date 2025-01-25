@@ -8,11 +8,6 @@ from facenet_pytorch import MTCNN, InceptionResnetV1
 
 from utils.logger import Logger
 
-
-def print_in_red(text):
-    print("\033[91m {}\033[00m".format(text))
-
-
 class FaceRecognizer(Logger):
     def __init__(self, threshold: float = 0.8):
         """
@@ -57,7 +52,7 @@ class FaceRecognizer(Logger):
 
         for image, img_label in zip(images, label):
             if img_label in self.enrolled_labels and not overwrite:
-                self.logger.info(f"Label '{img_label}' already exists. Skipping enrollment.")
+                self.logger.warning(f"Label '{img_label}' already exists. Skipping enrollment.")
                 continue
 
             faces = self.mtcnn(image)
