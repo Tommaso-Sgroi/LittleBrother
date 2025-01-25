@@ -3,8 +3,10 @@ from typing import Any
 import numpy as np
 from ultralytics import YOLO
 
+from utils.logger import Logger
 
-class PeopleDetector(YOLO):
+
+class PeopleDetector(YOLO, Logger):
     """
     0: 320x640 1 person, 1 umbrella, 3 chairs, 1 couch, 3 potted plants, 2 tvs, 21.1ms
     Speed: 1.2ms preprocess, 21.1ms inference, 1.1ms postprocess per image at shape (1, 3, 320, 640)
@@ -21,7 +23,8 @@ class PeopleDetector(YOLO):
     """
 
     def __init__(self, model_name, threshold=0.25, verbose=False, **kwargs):
-        super().__init__(model_name, **kwargs)
+        YOLO.__init__(self, model_name, **kwargs)
+        Logger.__init__(self, f'{model_name}')
         self.focus_on_classes = [0]
         self.threshold = threshold
         self.verbose = verbose
@@ -50,6 +53,8 @@ class PeopleDetector(YOLO):
         probs, bboxes = results.boxes.conf, results.boxes.xywh
         probs = probs.cpu()
         bboxes = bboxes.cpu()
+
+        self.logger.debug('%s people found', len(probs))
         return probs.numpy(), bboxes.numpy(), results
 
     def detect_on_frames(self, frames: list[np.ndarray]) -> list[tuple[Any, Any, Any]]:
