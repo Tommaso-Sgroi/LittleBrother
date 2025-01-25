@@ -3,10 +3,11 @@ from queue import Empty
 from threading import Thread, Lock
 from numpy import ndarray
 
+from utils.logger import Logger
 from .frame_source import FrameSource
 
 
-class FrameController(Thread):
+class FrameController(Thread, Logger):
     """
     Get frames from the frame sources Queue into a buffer.
     This is a thread which parses the frames from the queue into the buffer.
@@ -35,7 +36,9 @@ class FrameController(Thread):
                 return buffer
 
     def __init__(self, sources: list[FrameSource], fifo_queue: Queue):
-        super().__init__()
+        Logger.__init__(self, name=f"{self.__class__.__name__}")
+        Thread.__init__(self)
+
         self.sources = sources
         self.buffer = FrameController.Buffer()
         self.fifo_queue = fifo_queue
@@ -54,8 +57,13 @@ class FrameController(Thread):
                 remote_frames = self.fifo_queue.get(timeout=timeout)
                 self.buffer.append(remote_frames)
             except Empty as e:
-                print(f'Frame controller: queue is empty')
-        return 1
+                self.logger.debug(f'cannot read frames: empty queue')
+            except Exception as e:
+                self.logger.critical(f'cannot read frames: %s', e)
+                return 1
+        self.stop_sources()
+        self.logger.info("exiting")
+        return 0
 
     def get_frames(self) -> list[tuple[str, ndarray]]:
         """returns a list of: the frame source id (See VideoSource) and the frame np.array"""
@@ -65,10 +73,13 @@ class FrameController(Thread):
         ]
 
     def run(self, *, timeout=0.1):
+        self.logger.info('starting')
         for source in self.sources:
             source.start()
         return self.fetch_frames(timeout)
 
-    def stop(self):
+    def stop_sources(self):
+        self.logger.info(f'stopping frame sources')
         for source in self.sources: source.kill()
         for source in self.sources: source.join()
+        self.logger.info(f'stopped all frame sources')

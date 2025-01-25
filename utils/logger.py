@@ -26,8 +26,19 @@ def get_logger(name: str):
     """
     return logging.getLogger(name)
 
+
+class Logger(object):
+    def __init__(self, name):
+        self.logger: logging.Logger = logging.getLogger(name)
+
 if __name__ == '__main__':
     init_logger(level=logging.DEBUG)
     logging.getLogger('hello').info('Hello World!')
     logging.getLogger('hello').debug('Hello World!')
     logging.getLogger('Heyy').error('ao pupa')
+    try:
+        raise Exception('thorny problem')
+    except Exception as e:
+        logging.getLogger('Heyy').debug("Houston, we have a %s", e, exc_info=False)
+        logging.getLogger('Heyy').debug("Houston, we have a second %s", e)
+        logging.getLogger('Heyy').debug("Houston, we have a third %s", e, exc_info=True)

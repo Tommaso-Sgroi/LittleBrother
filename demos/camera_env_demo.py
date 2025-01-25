@@ -1,8 +1,9 @@
 from camera.video_frame_initializer import initializer
 from utils.view import view
-
+from utils.logger import init_logger
+import logging
 if __name__ == '__main__':
-
+    init_logger(logging.DEBUG)
     videos = \
         """../datasets/WiseNET/wisenet_dataset/video_sets/set_1/video1_1.avi
         ../datasets/WiseNET/wisenet_dataset/video_sets/set_1/video1_2.avi
@@ -12,7 +13,7 @@ if __name__ == '__main__':
 
     videos = [video.strip() for video in videos]
 
-    controller = initializer(videos, timeout=0.1, max_queue_size=100)
+    controller = initializer(videos, timeout=-1, max_queue_size=100)
     # controller = initializer(['WiseNET/wisenet_dataset/video_sets/set_1/video1_1.avi'])
 
     # test video source
