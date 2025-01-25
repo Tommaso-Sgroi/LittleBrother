@@ -45,5 +45,5 @@ class VideoSource(FrameSource):
                     self.logger.critical(f'cannot send video frame: %s', ex)
                     return 1
         except StopIteration:
-            self.logger.info(f'no more frames: {self.video_path}')
+            self.logger.info(f'no more frames, exiting')
             return 0
