@@ -10,7 +10,7 @@ from utils.logger import Logger
 
 
 class FaceRecognizer(Logger):
-    def __init__(self, threshold: float = 0.8):
+    def __init__(self, threshold: float = 0.8, min_face_size: int = 20):
         """
         Initialize the face recognizer.
         Args:
@@ -20,9 +20,10 @@ class FaceRecognizer(Logger):
         Logger.__init__(self, name=f"{self.__class__.__name__}")
 
         os.makedirs("registered_faces", exist_ok=True)
-        self.mtcnn = MTCNN(keep_all=True)
+        self.mtcnn = MTCNN(keep_all=True, min_face_size=min_face_size)
         self.resnet = InceptionResnetV1(pretrained="vggface2").eval()
         self.threshold = threshold
+        self.min_face_size = min_face_size
 
         embeddings_path = "registered_faces/embeddings.npy"
         labels_path = "registered_faces/labels.npy"
