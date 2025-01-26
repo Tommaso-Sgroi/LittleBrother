@@ -8,6 +8,7 @@ from facenet_pytorch import MTCNN, InceptionResnetV1
 
 from utils.logger import Logger
 
+
 class FaceRecognizer(Logger):
     def __init__(self, threshold: float = 0.8):
         """
@@ -52,7 +53,9 @@ class FaceRecognizer(Logger):
 
         for image, img_label in zip(images, label):
             if img_label in self.enrolled_labels and not overwrite:
-                self.logger.warning(f"Label '{img_label}' already exists. Skipping enrollment.")
+                self.logger.warning(
+                    f"Label '{img_label}' already exists. Skipping enrollment."
+                )
                 continue
 
             faces = self.mtcnn(image)
@@ -87,48 +90,63 @@ class FaceRecognizer(Logger):
             np.array(self.enrolled_labels, dtype=object),
         )
 
-    def recognize_faces(self, image) -> np.ndarray:
+    def recognize_faces(self, image) -> list:
         """
-        Recognize faces in an image.
+        Recognize faces in an image or a batch of images.
         Args:
             image: One or more PIL Images
         Returns:
-            A list of tuples containing the label and cosine similarity score for each recognized face
+            A list of dictionaries containing:
+                - 'label': The recognized person's label (str or None)
+                - 'confidence': Confidence score between 0 and 1 (float or None)
+                - 'bbox': Bounding box coordinates [x1, y1, x2, y2] (list or None)
         """
         faces = self.mtcnn(image)
+        boxes = self.mtcnn.detect(image)[0]
 
         if faces is None:
             self.logger.info("No faces detected in image")
-            return np.array([])
+            return []
 
         faces = np.array(faces)
         original_dim = faces.shape
 
+        # [batch_size, num_faces, channels, height, width] -> [batch_size * num_faces, channels, height, width]
         if len(faces.shape) == 5:
             # a batch of images
             self.logger.info("Batch of images detected")
             faces = faces.reshape(-1, *original_dim[2:])
+            if boxes is not None:
+                boxes = boxes.reshape(-1, 4)
 
         faces = torch.tensor(faces, dtype=torch.float)
         embeddings = self.resnet(faces)
 
         results = []
-
         similarities = F.cosine_similarity(
             embeddings.unsqueeze(1), self.enrolled_embeddings.unsqueeze(0), dim=-1
         )
 
         for i in range(len(embeddings)):
             max_similarity, idx = torch.max(similarities[i], dim=0)
-            if max_similarity < self.threshold:
-                results.append((None, None))
-                continue
-
-            results.append((self.enrolled_labels[idx], max_similarity.item()))
-
-        results = np.array(results)
+            result = {
+                "label": (
+                    self.enrolled_labels[idx]
+                    if max_similarity >= self.threshold
+                    else None
+                ),
+                "confidence": (
+                    float(max_similarity) if max_similarity >= self.threshold else None
+                ),
+                "bbox": boxes[i].tolist() if boxes is not None else None,
+            }
+            results.append(result)
 
         if len(original_dim) == 5:
-            results = results.reshape(original_dim[0], original_dim[1], 2)
+            # Reshape results for batch processing
+            results = [
+                results[i: i + original_dim[1]]
+                for i in range(0, len(results), original_dim[1])
+            ]
 
         return results
