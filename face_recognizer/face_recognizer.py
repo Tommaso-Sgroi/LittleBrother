@@ -120,7 +120,8 @@ class FaceRecognizer(Logger):
 
         all_results = []
         for faces in faces_list:
-            # batch reshaping
+            # batch reshaping:
+            # [batch_size, num_faces, channels, height, width] -> [batch_size * num_faces, channels, height, width]
             if len(faces.shape) == 5:
                 original_dim = faces.shape
                 faces = faces.reshape(-1, *original_dim[2:])
