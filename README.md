@@ -4,8 +4,8 @@
 - [x] Motion detection 
 - [x] Motion BBox  
 - [x] People detection
-- [ ] Face detection (to integrate)
-- [ ] Face recognition (to integrate)
+- [x] Face detection (to integrate)
+- [x] Face recognition (to integrate)
 - [ ] Take the appropriate action
 - [x] Divide the system in modules
 - [ ] Design the multiprocess pipeline
