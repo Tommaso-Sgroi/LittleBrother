@@ -91,8 +91,15 @@ class FaceRecognizer(Logger):
             np.array(self.enrolled_labels, dtype=object),
         )
 
-    def recognize_faces(self, image) -> list:
-        faces_list = self.mtcnn(image)
+    def recognize_faces(self, images) -> list:
+        """
+        Recognize faces in an image or a batch of images.
+        Args:
+            images: A single PIL Image or a list of PIL Images
+        Returns:
+            A list of results for each face in the input image(s)
+        """
+        faces_list = self.mtcnn(images)
 
         # Filter out empty results
         if faces_list is None or (
@@ -118,7 +125,9 @@ class FaceRecognizer(Logger):
                 original_dim = faces.shape
                 faces = faces.reshape(-1, *original_dim[2:])
 
-            faces = torch.tensor(faces, dtype=torch.float)
+            # faces = torch.tensor(faces, dtype=torch.float)
+            faces = faces.clone().detach().to(dtype=torch.float)
+
             embeddings = self.resnet(faces)
             similarities = F.cosine_similarity(
                 embeddings.unsqueeze(1), self.enrolled_embeddings.unsqueeze(0), dim=-1
