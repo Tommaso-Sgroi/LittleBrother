@@ -92,62 +92,64 @@ class FaceRecognizer(Logger):
         )
 
     def recognize_faces(self, image) -> list:
-        """
-        Recognize faces in an image or a batch of images.
-        Args:
-            image: One or more PIL Images
-        Returns:
-            A list of dictionaries containing:
-                - 'label': The recognized person's label (str or None)
-                - 'confidence': Confidence score between 0 and 1 (float or None)
-                - 'bbox': Bounding box coordinates [x1, y1, x2, y2] (list or None)
-        """
-        faces = self.mtcnn(image)
-        boxes = self.mtcnn.detect(image)[0]
+        faces_list = self.mtcnn(image)
 
-        if faces is None:
-            self.logger.info("No faces detected in image")
+        # Filter out empty results
+        if faces_list is None or (
+                isinstance(faces_list, list) and all(f is None for f in faces_list)
+        ):
+            self.logger.info("No faces detected in input")
             return []
 
-        faces = np.array(faces)
-        original_dim = faces.shape
+        # Convert single output to list
+        if not isinstance(faces_list, list):
+            faces_list = [faces_list]
 
-        # [batch_size, num_faces, channels, height, width] -> [batch_size * num_faces, channels, height, width]
-        if len(faces.shape) == 5:
-            # a batch of images
-            self.logger.info("Batch of images detected")
-            faces = faces.reshape(-1, *original_dim[2:])
-            if boxes is not None:
-                boxes = boxes.reshape(-1, 4)
+        # Filter out None faces
+        faces_list = [f for f in faces_list if f is not None]
+        if not faces_list:
+            self.logger.info("No valid faces found in the input")
+            return []
 
-        faces = torch.tensor(faces, dtype=torch.float)
-        embeddings = self.resnet(faces)
+        all_results = []
+        for faces in faces_list:
+            # batch reshaping
+            if len(faces.shape) == 5:
+                original_dim = faces.shape
+                faces = faces.reshape(-1, *original_dim[2:])
 
-        results = []
-        similarities = F.cosine_similarity(
-            embeddings.unsqueeze(1), self.enrolled_embeddings.unsqueeze(0), dim=-1
-        )
+            faces = torch.tensor(faces, dtype=torch.float)
+            embeddings = self.resnet(faces)
+            similarities = F.cosine_similarity(
+                embeddings.unsqueeze(1), self.enrolled_embeddings.unsqueeze(0), dim=-1
+            )
 
-        for i in range(len(embeddings)):
-            max_similarity, idx = torch.max(similarities[i], dim=0)
-            result = {
-                "label": (
-                    self.enrolled_labels[idx]
-                    if max_similarity >= self.threshold
-                    else None
-                ),
-                "confidence": (
-                    float(max_similarity) if max_similarity >= self.threshold else None
-                ),
-                "bbox": boxes[i].tolist() if boxes is not None else None,
-            }
-            results.append(result)
+            results = []
+            for i in range(len(embeddings)):
+                max_similarity, idx = torch.max(similarities[i], dim=0)
+                result = {
+                    "label": (
+                        self.enrolled_labels[idx]
+                        if max_similarity >= self.threshold
+                        else None
+                    ),
+                    "confidence": (
+                        float(max_similarity)
+                        if max_similarity >= self.threshold
+                        else None
+                    ),
+                }
+                results.append(result)
 
-        if len(original_dim) == 5:
-            # Reshape results for batch processing
-            results = [
-                results[i: i + original_dim[1]]
-                for i in range(0, len(results), original_dim[1])
-            ]
+            if (
+                    len(faces.shape) == 4
+                    and "original_dim" in locals()  # this is so cool 🤯
+                    and len(original_dim) == 5
+            ):
+                results = [
+                    results[i: i + original_dim[1]]
+                    for i in range(0, len(results), original_dim[1])
+                ]
+            all_results.append(results)
 
-        return results
+        return all_results if len(all_results) > 1 else all_results[0]
