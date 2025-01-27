@@ -130,6 +130,11 @@ class FaceRecognizer(Logger):
             faces = faces.detach().to(dtype=torch.float)
 
             embeddings = self.resnet(faces)
+
+            if self.enrolled_embeddings.shape[0] == 0:
+                self.logger.debug("No faces enrolled in the system!")
+                return []
+
             similarities = F.cosine_similarity(
                 embeddings.unsqueeze(1), self.enrolled_embeddings.unsqueeze(0), dim=-1
             )
