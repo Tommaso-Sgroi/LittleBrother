@@ -127,7 +127,7 @@ class FaceRecognizer(Logger):
                 faces = faces.reshape(-1, *original_dim[2:])
 
             # faces = torch.tensor(faces, dtype=torch.float)
-            faces = faces.clone().detach().to(dtype=torch.float)
+            faces = faces.detach().to(dtype=torch.float)
 
             embeddings = self.resnet(faces)
             similarities = F.cosine_similarity(
@@ -137,23 +137,19 @@ class FaceRecognizer(Logger):
             results = []
             for i in range(len(embeddings)):
                 max_similarity, idx = torch.max(similarities[i], dim=0)
+
+                label, confidence = None, None
+                if max_similarity >= self.threshold:
+                    label = self.enrolled_labels[idx]
+                    confidence = float(max_similarity)
                 result = {
-                    "label": (
-                        self.enrolled_labels[idx]
-                        if max_similarity >= self.threshold
-                        else None
-                    ),
-                    "confidence": (
-                        float(max_similarity)
-                        if max_similarity >= self.threshold
-                        else None
-                    ),
+                    'label': label,
+                    'confidence': confidence,
                 }
                 results.append(result)
-
             if (
                     len(faces.shape) == 4
-                    and "original_dim" in locals()  # this is so cool 🤯
+                    and "original_dim" in locals()  # this is so cool 🤯; By tommie: Pythonic kind of stuff T_T
                     and len(original_dim) == 5
             ):
                 results = [
