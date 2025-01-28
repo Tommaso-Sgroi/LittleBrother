@@ -7,10 +7,27 @@ from utils.logger import Logger
 from .frame_source import FrameSource
 
 
-class FrameController(Thread, Logger):
+class VideoFrameController(Thread, Logger):
     """
     Get frames from the frame sources Queue into a buffer.
     This is a thread which parses the frames from the queue into the buffer.
+    usage:
+    producer - consumer:
+    ```
+        controller = initializer(['source3', 'source2', 'source3'], timeout=-1, max_queue_size=15)
+        controller.start()
+    ```
+    single threaded:
+    ```
+        controller = initializer(['source3', 'source2', 'source3'], timeout=-1, max_queue_size=15)
+        while controller.has_alive_sources():
+            try:
+                sourceids_frames = controller.fetch_and_get_frames()
+            except queue.Empty:
+                # handle
+            for sourceid, frames in sourceids_frames:
+                pass
+    ```
     """
 
     class Buffer:
@@ -40,7 +57,7 @@ class FrameController(Thread, Logger):
         Thread.__init__(self)
 
         self.sources = sources
-        self.buffer = FrameController.Buffer()
+        self.buffer = VideoFrameController.Buffer()
         self.fifo_queue = fifo_queue
 
     def _alive_counter(self):
@@ -50,12 +67,30 @@ class FrameController(Thread, Logger):
                 dead_counter += 1
         return len(self.sources) - dead_counter
 
-    def fetch_frames(self, timeout=0.1):
+    def has_alive_sources(self):
+        return self._alive_counter() > 0
 
+    def fetch_frames(self, timeout):
+        remote_frames = self.fifo_queue.get(timeout=timeout)
+        self.buffer.append(remote_frames)
+
+    def get_frames(self) -> list[tuple[str, ndarray]]:
+        """returns a list of: the frame source id (See VideoSource) and the frame np.array"""
+        return [
+            frame.pop()  # de-encapsulate the frames -> (frame_source_id, frame)
+            for frame in self.buffer.get(flush=True)
+        ]
+
+    def fetch_and_get_frames(self, timeout=0.1):
+        """Same as calling fetch_frames() and then get_frames()"""
+        self.fetch_frames(timeout)
+        return self.get_frames()
+
+    def run(self, *, timeout=0.1):
+        self.logger.info('starting')
         while self._alive_counter() > 0:
             try:
-                remote_frames = self.fifo_queue.get(timeout=timeout)
-                self.buffer.append(remote_frames)
+                self.fetch_frames(timeout)
             except Empty as e:
                 self.logger.debug(f'cannot read frames: empty queue')
             except Exception as e:
@@ -65,18 +100,9 @@ class FrameController(Thread, Logger):
         self.logger.info("exiting")
         return 0
 
-    def get_frames(self) -> list[tuple[str, ndarray]]:
-        """returns a list of: the frame source id (See VideoSource) and the frame np.array"""
-        return [
-            frame.pop()  # de-encapsulate the frames -> (frame_source_id, frame)
-            for frame in self.buffer.get(flush=True)
-        ]
-
-    def run(self, *, timeout=0.1):
-        self.logger.info('starting')
+    def start_frame_sources(self):
         for source in self.sources:
             source.start()
-        return self.fetch_frames(timeout)
 
     def stop_sources(self):
         self.logger.info(f'stopping frame sources')

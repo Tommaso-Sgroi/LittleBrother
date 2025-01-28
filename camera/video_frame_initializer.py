@@ -1,10 +1,10 @@
 import os.path
 from multiprocessing import Queue
-from .frame_controller import FrameController
+from .frame_controller import VideoFrameController
 from .video_source import VideoSource
 
 
-def initializer(video_paths: list, max_queue_size = 1024, timeout=0.1) -> FrameController:
+def initializer(video_paths: list, max_queue_size = 1024, timeout=0.1) -> VideoFrameController:
     video_sources = []
     fifo_queue = Queue(maxsize=max_queue_size)
 
@@ -14,5 +14,5 @@ def initializer(video_paths: list, max_queue_size = 1024, timeout=0.1) -> FrameC
 
         video_sources.append(video_frame_source)
 
-    frame_controller = FrameController(video_sources, fifo_queue=fifo_queue)
+    frame_controller = VideoFrameController(video_sources, fifo_queue=fifo_queue)
     return frame_controller

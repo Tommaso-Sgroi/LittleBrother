@@ -14,7 +14,7 @@ class VideoSource(FrameSource):
         self.timeout = timeout
         super().__init__(id, stream=None, daemon=False)
 
-    @rate_limit(15)
+    @rate_limit(30)
     def read(self):
         return self.stream.read()
 
@@ -40,7 +40,7 @@ class VideoSource(FrameSource):
                 try:
                     self.queue.put([(self.id, frame)], timeout=self.timeout)
                 except queue.Full as qf:
-                    self.logger.debug(f'cannot send video frame: queue full')
+                    self.logger.debug(f'cannot send video frame: queue full, skipping frame')
                 except Exception as ex:
                     self.logger.critical(f'cannot send video frame: %s', ex)
                     return 1
