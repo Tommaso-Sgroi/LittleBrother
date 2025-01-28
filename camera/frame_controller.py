@@ -99,6 +99,7 @@ class VideoFrameController(Thread, Logger):
 
     def run(self, *, timeout=0.1):
         self.logger.info('starting')
+        self.start_frame_sources()
         while self._alive_counter() > 0:
             try:
                 self.fetch_frames(timeout)
