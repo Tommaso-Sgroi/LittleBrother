@@ -1,3 +1,6 @@
+from queue import Empty
+from time import sleep
+
 from camera.video_frame_initializer import initializer
 from face_recognizer.face_recognizer import FaceRecognizer
 from motion_detector.motion_detector import MotionDetector
@@ -16,17 +19,45 @@ if __name__ == '__main__':
 
     videos = [video.strip() for video in videos]
 
-    controller = initializer(videos, timeout=-1, max_queue_size=100)
+    controller = initializer(videos, timeout=-1, max_queue_size=30*len(videos))
 
-    yolosize = 'n'
-    yolo11 = PeopleDetector(f"yolo11{yolosize}.pt", verbose=False, )
-    yolo11.to('cpu')
+    # yolosize = 'n'
+    # yolo11 = PeopleDetector(f"yolo11{yolosize}.pt", verbose=False, )
+    # yolo11.to('cpu')
+    #
+    # overlap_threshold = 0.0005
+    # area_threshold = 700
+    # motion_detector = MotionDetector(area_threshold=area_threshold, overlap_threshold=overlap_threshold)
+    #
+    # face_recognizer = FaceRecognizer(threshold=0.5)
 
-    overlap_threshold = 0.0005
-    area_threshold = 700
-    motion_detector = MotionDetector(area_threshold=area_threshold, overlap_threshold=overlap_threshold)
 
-    face_recognizer = FaceRecognizer(threshold=0.5)
+    MULTI_THREAD = False
+    if MULTI_THREAD:
+        controller.start()
+        i = 0
+        while True:
+            sleep(1)
+            sourceids_frames = controller.get_frames()
+            # for video_id, frame in frames:
+            #     probs, bboxes, result = yolo11.detect(frame)
+            #     print('confidence scores', probs)
+            #     print('bboxes', bboxes)
+            #     annotated_frame = result.plot()
+            #     view(annotated_frame, winname=video_id)
+            for video_id, frame in sourceids_frames:
+                view(frame, winname=video_id)
+    else:
+        controller.start_frame_sources()
+        while controller.has_alive_sources():
+            try:
+                sourceids_frames = controller.fetch_and_get_frames()
+            except Empty:
+                continue
+            for sourceid, frame in sourceids_frames:
+                view(frame, winname=sourceid)
+
+
     # face_5 = Image.open('demo_images/face_5.jpg')
     # face_recognizer.enroll_face(face_5, 'Michael Scott', overwrite=True)
 
@@ -47,21 +78,3 @@ if __name__ == '__main__':
     #     frames = queue.get()
     #     for frame in frames:
     #         view(frame)
-
-    controller.start()
-    from time import sleep
-
-
-    i = 0
-    while True:
-        sleep(1)
-        frames = controller.get_frames()
-        for video_id, frame in frames:
-            probs, bboxes, result = yolo11.detect(frame)
-            print('confidence scores', probs)
-            print('bboxes', bboxes)
-            annotated_frame = result.plot()
-            view(annotated_frame, winname=video_id)
-
-        if len(frames) == 0:
-            break
