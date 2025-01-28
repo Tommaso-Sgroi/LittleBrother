@@ -4,7 +4,7 @@ from .frame_source import FrameSource
 import cv2 as cv
 from multiprocessing import Queue
 from .utils import rate_limit
-
+from time import sleep
 class VideoSource(FrameSource):
 
     def __init__(self, id, video_path: str, fifo_queue: Queue, timeout=0.1):
@@ -12,6 +12,7 @@ class VideoSource(FrameSource):
         # video_capture = cv.VideoCapture(video_path)
         self.queue = fifo_queue
         self.timeout = timeout
+        self.wait_backoff = 1
         super().__init__(id, stream=None, daemon=False)
 
     @rate_limit(15)
@@ -24,6 +25,14 @@ class VideoSource(FrameSource):
             raise StopIteration()
         return frame
 
+    def _increase_backoff(self):
+        self.wait_backoff *= 1.5
+
+    def _decrease_backoff(self):
+        self.wait_backoff /= 1.2
+
+    def _calculate_backoff_time(self):
+        return self.wait_backoff * (10 ** -1)
 
     def run(self):
         # lo stream va inserito per forza qua altrimenti non funziona nulla
@@ -37,13 +46,21 @@ class VideoSource(FrameSource):
         try:
             while True:
                 frame = self.next()
-                try:
-                    self.queue.put([(self.id, frame)], timeout=self.timeout)
-                except queue.Full as qf:
-                    self.logger.debug(f'cannot send video frame: queue full')
-                except Exception as ex:
-                    self.logger.critical(f'cannot send video frame: %s', ex)
-                    return 1
+                while True:
+                    self.logger.debug('backoff timer %s', str(self.wait_backoff))
+                    try:
+                        # wait backoff time
+                        sleep(self._calculate_backoff_time())
+                        # send messages
+                        self.queue.put([(self.id, frame)], timeout=self.timeout)
+                        self._decrease_backoff()
+                        break
+                    except queue.Full as qf:
+                        self.logger.debug(f'cannot send video frame: queue full')
+                        self._increase_backoff()
+                    except Exception as ex:
+                        self.logger.critical(f'cannot send video frame: %s', ex)
+                        return 1
         except StopIteration:
             self.logger.info(f'no more frames, exiting')
             return 0
