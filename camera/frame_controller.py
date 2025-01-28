@@ -1,3 +1,4 @@
+import queue
 from multiprocessing import Queue
 from queue import Empty
 from threading import Thread, Lock
@@ -37,6 +38,10 @@ class VideoFrameController(Thread, Logger):
             self._buffer = []
             self.mutex_lock = Lock()
 
+        def is_empty(self):
+            with self.mutex_lock:
+                return not self._buffer
+
         def append(self, x):
             with self.mutex_lock:
                 self._buffer.append(x)
@@ -70,6 +75,9 @@ class VideoFrameController(Thread, Logger):
     def has_alive_sources(self):
         return self._alive_counter() > 0
 
+    def has_empty_buffer(self):
+        return self.buffer.is_empty()
+
     def fetch_frames(self, timeout):
         remote_frames = self.fifo_queue.get(timeout=timeout)
         self.buffer.append(remote_frames)
@@ -81,9 +89,12 @@ class VideoFrameController(Thread, Logger):
             for frame in self.buffer.get(flush=True)
         ]
 
-    def fetch_and_get_frames(self, timeout=0.1):
+    def fetch_and_get_frames(self, timeout=0.1) -> list[tuple[str, ndarray]]:
         """Same as calling fetch_frames() and then get_frames()"""
-        self.fetch_frames(timeout)
+        try:
+            self.fetch_frames(timeout)
+        except queue.Empty:
+            self.logger.debug(f'cannot read frames: empty queue')
         return self.get_frames()
 
     def run(self, *, timeout=0.1):
