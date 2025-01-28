@@ -64,24 +64,3 @@ if __name__ == '__main__':
             else:
                 for video_id, frame in sourceids_frames:
                     view(frame, winname=video_id)
-
-    # face_5 = Image.open('demo_images/face_5.jpg')
-    # face_recognizer.enroll_face(face_5, 'Michael Scott', overwrite=True)
-
-    # probs, bboxes, result = yolo11.detect(frame)
-    # print('confidence scores', probs)
-    # print('bboxes', bboxes)
-    # annotated_frame = result.plot()
-
-    # controller = initializer(['WiseNET/wisenet_dataset/video_sets/set_1/video1_1.avi'])
-
-    # test video source
-    # video_source: VideoSource = controller.sources[0]
-    # print(video_source.stream.isOpened())
-    # print(video_source.stream.read())
-    # quit()
-    # video_source.start()
-    # while True:
-    #     frames = queue.get()
-    #     for frame in frames:
-    #         view(frame)
