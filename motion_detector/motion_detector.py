@@ -31,6 +31,21 @@ class MotionDetector(Logger):
         return self.process_frame(frame, draw=draw)
 
 
+class MotionDetectorMap(object):
+    def __init__(self, area_threshold=700, overlap_threshold=0.3):
+        self.detectors = {}
+        self.area_threshold = area_threshold
+        self.overlap_threshold = overlap_threshold
+
+    def get_motion_detector(self, name: str) -> MotionDetector:
+        if name not in self.detectors:
+            self.detectors[name] = MotionDetector(
+                    area_threshold=self.area_threshold,
+                    overlap_threshold=self.overlap_threshold
+            )
+        return self.detectors[name]
+
+
 def detect_moving_objects(
         frame: np.ndarray,
         background_subtractor: cv.BackgroundSubtractor,
