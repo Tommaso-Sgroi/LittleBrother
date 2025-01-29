@@ -11,3 +11,4 @@
 - [ ] ~~Design the multiprocess pipeline~~
 - [x] Implement the pipeline
 - [x] Simulate the Camera Network Environment
+- [ ] Profiling and performance optimization
