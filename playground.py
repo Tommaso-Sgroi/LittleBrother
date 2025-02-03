@@ -14,7 +14,7 @@ def process_video_frames(video_path):
         else ("mps" if torch.backends.mps.is_available() else "cpu")
     )
     yolo_model = YOLO("yolo11n.pt")
-    face_recognizer = FaceRecognizer(threshold=0.5)
+    face_recognizer = FaceRecognizer(threshold=0.5, device=device)
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -86,5 +86,6 @@ if __name__ == "__main__":
         # "./datasets/video1_5.mp4",
         1,  # MacBook webcam :)
     ]
+
     with ProcessPoolExecutor(max_workers=len(video_paths)) as executor:
         executor.map(process_video_frames, video_paths)

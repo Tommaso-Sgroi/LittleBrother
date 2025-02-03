@@ -10,86 +10,130 @@ from utils.logger import Logger
 
 
 class FaceRecognizer(Logger):
-    def __init__(self, threshold: float = 0.8, min_face_size: int = 20):
+    def __init__(
+            self,
+            threshold: float = 0.8,
+            min_face_size: int = 20,
+            device=torch.device("cpu"),
+    ):
         """
         Initialize the face recognizer.
         Args:
             threshold: The cosine similarity threshold for face recognition.
+            min_face_size: Minimum face size for detection
         """
-
         Logger.__init__(self, name=f"{self.__class__.__name__}")
 
-        os.makedirs("registered_faces", exist_ok=True)
+        self.faces_dir = "registered_faces"
+        os.makedirs(self.faces_dir, exist_ok=True)
+
+        self.device = device
+
         self.mtcnn = MTCNN(keep_all=True, min_face_size=min_face_size)
+
         self.resnet = InceptionResnetV1(pretrained="vggface2").eval()
         self.threshold = threshold
         self.min_face_size = min_face_size
 
-        embeddings_path = "registered_faces/embeddings.npy"
-        labels_path = "registered_faces/labels.npy"
+        self.enrolled_embeddings = None
+        self.enrolled_labels = None
+        self.load_enrolled_faces()
 
-        if os.path.exists(embeddings_path) and os.path.exists(labels_path):
-            self.enrolled_embeddings = torch.tensor(
-                np.load(embeddings_path), dtype=torch.float
-            )
-            self.enrolled_labels = np.load(labels_path, allow_pickle=True).tolist()
-        else:
-            self.enrolled_embeddings = torch.empty((0, 512))
-            self.enrolled_labels = []
+    def load_enrolled_faces(self):
+        """Load all enrolled face embeddings from files"""
+        self.enrolled_embeddings = torch.empty((0, 512))
+        self.enrolled_labels = []
 
-    def enroll_face(self, images, label, overwrite=False):
+        for filename in os.listdir(self.faces_dir):
+            if filename.endswith(".npy"):
+                label = os.path.splitext(filename)[0]
+                embedding_path = os.path.join(self.faces_dir, filename)
+                try:
+                    # Load and ensure correct shape
+                    embedding_np = np.load(embedding_path).astype(np.float32)
+                    if len(embedding_np.shape) == 1:
+                        embedding_np = embedding_np.reshape(1, -1)
+                    embedding = torch.from_numpy(embedding_np)
+
+                    if embedding.shape[1] != 512:
+                        raise ValueError(f"Invalid embedding shape: {embedding.shape}")
+
+                    self.enrolled_embeddings = torch.cat(
+                        [self.enrolled_embeddings, embedding]
+                    )
+                    self.enrolled_labels.append(label)
+                except Exception as e:
+                    self.logger.error(f"Error loading embedding for {label}: {str(e)}")
+                    continue
+
+    def enroll_face(self, face_image: Image, label: str) -> bool:
         """
-        Enroll a face in the face recognizer.
+        Enroll a new face with the given label.
         Args:
-            images: A single PIL Image or a list of PIL Images
-            label: The label for the enrolled face
-            overwrite: If True, overwrites existing face with same label
+            face_image: PIL Image containing the face
+            label: Label/name for the face
+        Returns:
+            bool: True if enrollment successful, False otherwise
         """
-        if isinstance(images, Image.Image):
-            images = [images]
-            label = [label]
+        embedding = self._get_embedding(face_image)
+        if embedding is None:
+            return False
 
-        if len(images) != len(label):
-            raise ValueError("Number of images and labels must match")
+        # Ensure correct shape and type
+        embedding_np = embedding.detach().cpu().numpy().astype(np.float32)
 
-        for image, img_label in zip(images, label):
-            if img_label in self.enrolled_labels and not overwrite:
-                self.logger.warning(
-                    f"Label '{img_label}' already exists. Skipping enrollment."
-                )
-                continue
+        # Save embedding to individual file
+        file_path = os.path.join(self.faces_dir, f"{label}.npy")
+        np.save(file_path, embedding_np)
 
-            faces = self.mtcnn(image)
+        self.enrolled_embeddings = torch.cat([self.enrolled_embeddings, embedding])
+        self.enrolled_labels.append(label)
+        return True
 
-            if faces is None:
-                self.logger.error("No faces detected in image")
-                raise ValueError("No faces detected in image")
+    def get_enrolled_faces(self) -> list:
+        """
+        Get list of enrolled users
+        Returns:
+            list: List of enrolled user labels
+        """
+        return self.enrolled_labels
 
-            if len(faces) > 1:
-                self.logger.error("Multiple faces detected in image.")
-                raise ValueError(
-                    "Multiple faces detected in image. Please provide an image with exactly one face."
-                )
+    def delete_face(self, label: str) -> bool:
+        """
+        Delete an enrolled face
+        Args:
+            label: Label/name of the face to delete
+        Returns:
+            bool: True if deletion successful, False otherwise
+        """
+        if label not in self.enrolled_labels:
+            return False
 
-            embedding = self.resnet(faces[0].unsqueeze(0))
+        file_path = os.path.join(self.faces_dir, f"{label}.npy")
+        try:
+            os.remove(file_path)
+        except OSError:
+            return False
 
-            if img_label in self.enrolled_labels:
-                idx = self.enrolled_labels.index(img_label)
-                self.enrolled_embeddings[idx] = embedding
-            else:
-                self.enrolled_embeddings = torch.cat(
-                    [self.enrolled_embeddings, embedding], dim=0
-                )
-                self.enrolled_labels.append(img_label)
-
-        np.save(
-            "registered_faces/embeddings.npy",
-            self.enrolled_embeddings.detach().numpy(),
+        idx = self.enrolled_labels.index(label)
+        self.enrolled_labels.pop(idx)
+        self.enrolled_embeddings = torch.cat(
+            [self.enrolled_embeddings[:idx], self.enrolled_embeddings[idx + 1:]]
         )
-        np.save(
-            "registered_faces/labels.npy",
-            np.array(self.enrolled_labels, dtype=object),
-        )
+        return True
+
+    def _get_embedding(self, face_image: Image) -> torch.Tensor:
+        """Helper method to get face embedding"""
+        faces = self.mtcnn(face_image)
+        if faces is None or len(faces) == 0:
+            return None
+
+        if len(faces) > 1:
+            self.logger.warning(
+                "More than one face detected in the image. Using the first face only."
+            )
+
+        return self.resnet(faces[0].unsqueeze(0))
 
     def recognize_faces(self, images) -> list:
         """
@@ -148,13 +192,14 @@ class FaceRecognizer(Logger):
                     label = self.enrolled_labels[idx]
                     confidence = float(max_similarity)
                 result = {
-                    'label': label,
-                    'confidence': confidence,
+                    "label": label,
+                    "confidence": confidence,
                 }
                 results.append(result)
             if (
                     len(faces.shape) == 4
-                    and "original_dim" in locals()  # this is so cool 🤯; By tommie: Pythonic kind of stuff T_T
+                    and "original_dim"
+                    in locals()  # this is so cool 🤯; By tommie: Pythonic kind of stuff T_T
                     and len(original_dim) == 5
             ):
                 results = [
