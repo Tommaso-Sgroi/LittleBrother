@@ -1,8 +1,10 @@
 import time
+from concurrent.futures import ProcessPoolExecutor
+
 import cv2
 import torch
 from ultralytics import YOLO
-from concurrent.futures import ProcessPoolExecutor
+
 from face_recognizer.face_recognizer import FaceRecognizer
 
 
@@ -14,7 +16,7 @@ def process_video_frames(video_path):
         else ("mps" if torch.backends.mps.is_available() else "cpu")
     )
     yolo_model = YOLO("yolo11n.pt")
-    face_recognizer = FaceRecognizer(threshold=0.5, device=device)
+    face_recognizer = FaceRecognizer(threshold=0.5)  # device=device)
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -82,9 +84,9 @@ def process_video_frames(video_path):
 if __name__ == "__main__":
     video_paths = [
         "./datasets/new_video.mp4",
-        # "./datasets/video1_1.mp4",
+        "./datasets/video1_1.mp4",
         # "./datasets/video1_5.mp4",
-        1,  # MacBook webcam :)
+        # 1,  # MacBook webcam :)
     ]
 
     with ProcessPoolExecutor(max_workers=len(video_paths)) as executor:

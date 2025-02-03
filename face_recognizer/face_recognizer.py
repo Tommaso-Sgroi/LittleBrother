@@ -31,7 +31,9 @@ class FaceRecognizer(Logger):
 
         self.mtcnn = MTCNN(keep_all=True, min_face_size=min_face_size)
 
-        self.resnet = InceptionResnetV1(pretrained="vggface2").eval()
+        self.resnet = InceptionResnetV1(
+            pretrained="vggface2", device=self.device
+        ).eval()
         self.threshold = threshold
         self.min_face_size = min_face_size
 
@@ -133,7 +135,9 @@ class FaceRecognizer(Logger):
                 "More than one face detected in the image. Using the first face only."
             )
 
-        return self.resnet(faces[0].unsqueeze(0))
+        face_tensor = faces[0].unsqueeze(0).to(self.device)
+        embedding = self.resnet(face_tensor)
+        return embedding.to("cpu")
 
     def recognize_faces(self, images) -> list:
         """
@@ -170,8 +174,7 @@ class FaceRecognizer(Logger):
                 original_dim = faces.shape
                 faces = faces.reshape(-1, *original_dim[2:])
 
-            # faces = torch.tensor(faces, dtype=torch.float)
-            faces = faces.detach().to(dtype=torch.float)
+            faces = faces.detach().to(dtype=torch.float).to(self.device)
 
             embeddings = self.resnet(faces)
 
@@ -179,8 +182,9 @@ class FaceRecognizer(Logger):
                 self.logger.debug("No faces enrolled in the system!")
                 return []
 
+            enrolled_embeddings_device = self.enrolled_embeddings.to(self.device)
             similarities = F.cosine_similarity(
-                embeddings.unsqueeze(1), self.enrolled_embeddings.unsqueeze(0), dim=-1
+                embeddings.unsqueeze(1), enrolled_embeddings_device.unsqueeze(0), dim=-1
             )
 
             results = []
@@ -190,7 +194,7 @@ class FaceRecognizer(Logger):
                 label, confidence = None, None
                 if max_similarity >= self.threshold:
                     label = self.enrolled_labels[idx]
-                    confidence = float(max_similarity)
+                    confidence = float(max_similarity.cpu())
                 result = {
                     "label": label,
                     "confidence": confidence,
