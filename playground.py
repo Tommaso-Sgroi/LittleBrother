@@ -8,6 +8,13 @@ from ultralytics import YOLO
 from face_recognizer.face_recognizer import FaceRecognizer
 
 
+def rescale_frame(frame, percent=50):
+    width = int(frame.shape[1] * percent / 100)
+    height = int(frame.shape[0] * percent / 100)
+    dim = (width, height)
+    return cv2.resize(frame, dim, interpolation=cv2.INTER_AREA)
+
+
 def process_video_frames(video_path):
     # Each process gets its own model and face recognizer
     device = (
@@ -19,6 +26,7 @@ def process_video_frames(video_path):
     face_recognizer = FaceRecognizer(threshold=0.5)  # device=device)
 
     cap = cv2.VideoCapture(video_path)
+
     if not cap.isOpened():
         print(f"Error opening video: {video_path}")
         return
@@ -32,6 +40,8 @@ def process_video_frames(video_path):
         ret, frame = cap.read()
         if not ret:
             break
+
+        frame = rescale_frame(frame, percent=50)
 
         batch_frames.append(frame)
         frame_count += 1
@@ -84,9 +94,9 @@ def process_video_frames(video_path):
 if __name__ == "__main__":
     video_paths = [
         "./datasets/new_video.mp4",
-        "./datasets/video1_1.mp4",
+        # "./datasets/video1_1.mp4",
         # "./datasets/video1_5.mp4",
-        # 1,  # MacBook webcam :)
+        1,  # MacBook webcam :)
     ]
 
     with ProcessPoolExecutor(max_workers=len(video_paths)) as executor:
