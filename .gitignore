@@ -181,3 +181,6 @@ detection_results
 *.mp4
 WiseNET
 datasets
+
+# sqlite
+*.db

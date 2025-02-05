@@ -4,7 +4,7 @@ from queue import Empty
 from threading import Thread, Lock
 from numpy import ndarray
 
-from utils.logger import Logger
+from local_utils.logger import Logger
 from .frame_source import FrameSource
 
 

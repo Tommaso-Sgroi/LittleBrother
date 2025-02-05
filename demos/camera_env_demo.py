@@ -3,8 +3,8 @@ from time import sleep
 
 from camera.video_frame_initializer import initializer
 from people_detector.people_detector import PeopleDetector
-from utils.view import view
-from utils.logger import init_logger
+from local_utils.view import view
+from local_utils.logger import init_logger
 import logging
 if __name__ == '__main__':
     init_logger(logging.DEBUG)

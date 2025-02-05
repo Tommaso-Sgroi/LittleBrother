@@ -3,7 +3,7 @@ from typing import Any
 import numpy as np
 from ultralytics import YOLO
 
-from utils.logger import Logger
+from local_utils.logger import Logger
 
 
 class PeopleDetector(YOLO, Logger):

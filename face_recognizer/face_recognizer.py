@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from PIL import Image
 from facenet_pytorch import MTCNN, InceptionResnetV1
 
-from utils.logger import Logger
+from local_utils.logger import Logger
 
 
 class FaceRecognizer(Logger):
