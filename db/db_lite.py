@@ -80,8 +80,8 @@ class TDBAtomicConnection(l.Logger):
         );      
         CREATE TABLE IF NOT EXISTS Cameras (
             -- handles the registered cameras, so the cameras which can access the system and are
-            camera_id INTEGER PRIMARY KEY,
-            camera_name TEXT DEFAULT 'camera_0',
+            camera_id INTEGER UNSIGNED PRIMARY KEY,
+            camera_name TEXT UNIQUE
         );      
         CREATE TABLE IF NOT EXISTS AccessList (
         -- handles the access list of the users, so the rooms they can access  
@@ -90,9 +90,10 @@ class TDBAtomicConnection(l.Logger):
         -- the user_name is a chosen name by the authed user, it can be anything 
         -- to identify the user in the system
             user_name TEXT,
-            room_name TEXT,
+            camera_id INTEGER UNSIGNED, 
             listed VARCHAR(1) NOT NULL CHECK(listed IN ('b','w')) DEFAULT 'b',
-            PRIMARY KEY (user_name, room_name)
+            FOREIGN KEY (camera_id) REFERENCES Cameras(camera_id) ON DELETE CASCADE,
+            PRIMARY KEY (user_name, camera_id)
             );
         """
         cursor = self.get_cursor()
@@ -122,6 +123,17 @@ class TDBAtomicConnection(l.Logger):
     def user_is_authed(self, user_id: int) -> bool:
         return self.user_exist(user_id)
 
+    def camera_exist(self, camera_id: int) -> bool:
+        cursor = self.get_cursor()
+        try:
+            cursor.execute("SELECT COUNT(camera_id) FROM Cameras WHERE camera_id=? LIMIT 1", (camera_id,))
+            camera_count = cursor.fetchone()[0]
+            return bool(camera_count)
+        except Exception as e:
+            self.logger.error("Error during camera selection: %s", e)
+        finally:
+            cursor.close()
+
     def person_already_enrolled(self, user_name: str):
         """Person enrolled in the system, this is not the user"""
         cursor = self.get_cursor()
@@ -134,17 +146,21 @@ class TDBAtomicConnection(l.Logger):
         finally:
             cursor.close()
 
-    def get_person_access_list(self, user_name: str):
+    def get_person_rooms_access_list(self, user_name: str):
         cursor = self.get_cursor()
         try:
-            cursor.execute("SELECT * FROM AccessList WHERE user_name=?", (user_name,))
+            cursor.execute("""
+                       SELECT user_name, AL.camera_id AS camera_id, camera_name, listed 
+                       FROM AccessList AS AL JOIN Cameras AS CM ON AL.camera_id=CM.camera_id  
+                       WHERE user_name=?
+                        """,(user_name,))
             return cursor.fetchall()
         except Exception as e:
             self.logger.error("Error during user access list selection: %s", e)
         finally:
             cursor.close()
 
-    def get_person_access_names(self):
+    def get_people_access_names(self):
         cursor = self.get_cursor()
         try:
             cursor.execute("SELECT UNIQUE(user_name) FROM AccessList")
@@ -164,22 +180,32 @@ class TDBAtomicConnection(l.Logger):
         finally:
             cursor.close()
 
-    def add_person_room_access(self, user_name:str, room_name: str, listed: str = 'b'):
+    def add_person_room_access(self, user_name:str, camera_id: int, listed: str = 'b'):
         cursor = self.get_cursor()
         try:
-            cursor.execute("INSERT INTO AccessList (user_name, room_name, listed) VALUES (?,?,?)",
-                           (user_name, room_name, listed))
+            cursor.execute("INSERT INTO AccessList (user_name, camera_id, listed) VALUES (?,?,?)",
+                           (user_name, camera_id, listed))
             self.conn.commit()
         except Exception as e:
             self.logger.error("Error during user insertion: %s", e)
         finally:
             cursor.close()
 
-    # Update db
-    def update_person_access_list(self, user_name: str, room_name: str, listed: str):
+    def add_camera(self, camera_id: int, camera_name: str):
         cursor = self.get_cursor()
         try:
-            cursor.execute("UPDATE AccessList SET listed=? WHERE user_name=? AND room_name=?", (listed, user_name, room_name))
+            cursor.execute("INSERT INTO Cameras (camera_id, camera_name) VALUES (?, ?)", (camera_id, camera_name,))
+            self.conn.commit()
+        except Exception as e:
+            self.logger.error("Error during camera insertion: %s", e)
+        finally:
+            cursor.close()
+
+    # Update db
+    def update_person_access_list(self, user_name: str, camera_id: int, listed: str):
+        cursor = self.get_cursor()
+        try:
+            cursor.execute("UPDATE AccessList SET listed=? WHERE user_name=? AND camera_id=?", (listed, user_name, camera_id))
             self.conn.commit()
         except Exception as e:
             self.logger.error("Error during listed update: %s", e)
@@ -196,24 +222,44 @@ class TDBAtomicConnection(l.Logger):
         finally:
             cursor.close()
 
-    def update_room_name(self, old_room_name: str, new_room_name: str):
+    def update_room_name(self, camera_id: int, new_room_name: str):
         cursor = self.get_cursor()
         try:
-            cursor.execute("UPDATE AccessList SET room_name=? WHERE room_name=?", (new_room_name, old_room_name))
+            cursor.execute("UPDATE Cameras SET camera_name=? WHERE camera_id=?", (new_room_name, camera_id))
             self.conn.commit()
         except Exception as e:
             self.logger.error("Error during room name update: %s", e)
         finally:
             cursor.close()
 
-    # Delete from db
-    def delete_person_access_room(self, user_name: str, room_name: str):
+    def update_camera_name(self, camera_id: int, new_camera_name: str):
         cursor = self.get_cursor()
         try:
-            cursor.execute("DELETE FROM AccessList WHERE user_name=? AND room_name=?", (user_name, room_name))
+            cursor.execute("UPDATE Cameras SET camera_name=? WHERE camera_id=?", (new_camera_name, camera_id))
+            self.conn.commit()
+        except Exception as e:
+            self.logger.error("Error during camera name update: %s", e)
+        finally:
+            cursor.close()
+
+    # Delete from db
+    def delete_person_access_room(self, user_name: str, camera_id: int):
+        cursor = self.get_cursor()
+        try:
+            cursor.execute("DELETE FROM AccessList WHERE camera_id=? AND user_name=?;", (camera_id, user_name))
             self.conn.commit()
         except Exception as e:
             self.logger.error("Error during user deletion: %s", e)
+        finally:
+            cursor.close()
+
+    def delete_camera(self, camera_id: int):
+        cursor = self.get_cursor()
+        try:
+            cursor.execute("DELETE FROM Cameras WHERE camera_id=?", (camera_id,))
+            self.conn.commit()
+        except Exception as e:
+            self.logger.error("Error during camera deletion: %s", e)
         finally:
             cursor.close()
 
@@ -229,10 +275,14 @@ class TDBAtomicConnection(l.Logger):
 
 if __name__ == "__main__":
     # example usage
-    db = TBDatabase("/tmp/my_database.db", drop_db=True)
+    db = TBDatabase("./my_database.db", drop_db=True)
     with db() as db:
         db.add_authed_user(69420)
-        db.add_person_room_access('mr2', "room1", 'b')
-        db.update_person_access_list('mr2', "room1", 'w')
+        db.add_camera(1, 'Camera 1')
+        db.add_camera(2, 'Camera 2')
+        db.add_person_room_access('mr2', 1, 'b')
+        db.add_person_room_access('mr2', 2, 'b')
+
+        db.update_person_access_list('mr2', 2, 'w')
         print(db.user_exist(1), db.user_exist(69420))
     print('Done')
