@@ -134,6 +134,16 @@ class TDBAtomicConnection(l.Logger):
         finally:
             cursor.close()
 
+    def get_cameras(self):
+        cursor = self.get_cursor()
+        try:
+            cursor.execute("SELECT camera_id, camera_name FROM Cameras")
+            return cursor.fetchall()
+        except Exception as e:
+            self.logger.error("Error during camera selection: %s", e)
+        finally:
+            cursor.close()
+
     def person_already_enrolled(self, user_name: str):
         """Person enrolled in the system, this is not the user"""
         cursor = self.get_cursor()

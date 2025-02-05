@@ -8,12 +8,15 @@ from logging import DEBUG, INFO
 from random import randint
 from msg_bot.utils import require_auth
 from db.db_lite import TBDatabase
+from face_recognizer.face_recognizer import FaceRecognizer
+from io import BytesIO
+from PIL import Image
 '''
 This code is a bit rushed and must, i repeat MUST, be refactored to be at least something apparently good
 '''
 
 bot = telebot.TeleBot(os.getenv("TELEGRAM_BOT_TOKEN"))
-DB = TBDatabase('database.db', drop_db=True)
+DB = TBDatabase('database.db', drop_db=False)
 
 auth_token = os.getenv("AUTH_TOKEN")
 basedir_enroll_path = './registered_faces' # TODO change to an actual option
@@ -40,7 +43,7 @@ def send_help(message):
                         "/start - Start the bot\n"+\
                         "/help - Show this message\n"+\
                         "/auth - Authenticate with your given access token\n"+\
-                        "/enroll - Enroll new person in the system\n"+\
+                        "/enroll [name] - Enroll new person in the system\n"+\
                         "")
 
 @bot.message_handler(commands=['auth'])
@@ -70,7 +73,6 @@ def auth_user(message):
 @bot.message_handler(commands=['enroll'])
 @require_auth(bot=bot, db=DB)
 def enroll_user(message):
-    print('enroll')
     enroll_name = message.text.split(' ')
     del enroll_name[0]
     enroll_name = ' '.join(enroll_name).strip()
@@ -82,58 +84,92 @@ def enroll_user(message):
         if db.person_already_enrolled(enroll_name):
             bot.send_message(message.chat.id, f'{enroll_name} already enrolled into the system')
             return
+        cameras = db.get_cameras()
+        if len(cameras) == 0:
+            bot.send_message(message.chat.id, 'No cameras available, aborting')
+            return
+        bot.send_message(message.chat.id, f"Write the #camera from the following '{cameras}' to enroll the person")
+    bot.register_next_step_handler(message, select_camera, enroll_name=enroll_name)
 
-    print('enrolling:', enroll_name)
-    # bot.send_message(message.chat.id, "send a photo of person's face you want to enroll\nNOTE:todo")
-    select_access_type(message, enroll_name=enroll_name)
 
-def select_access_type(message, selected=False, enroll_name=''):
+def select_camera(message, enroll_name=''):
+    print('selecting camera')
+    if message.text is None:
+        bot.send_message(message.chat.id, 'Nothing selected, aborting')
+        return
+
+    camera_id = message.text.strip()
+    if camera_id.isdigit():
+        camera_id = int(camera_id)
+    else:
+        bot.send_message(message.chat.id, 'Invalid camera id, aborting')
+        return
+
+    with DB() as db:
+        if not db.camera_exist(camera_id):
+            bot.send_message(message.chat.id, 'Camera does not exist, aborting')
+            return
+
+    bot.send_message(message.chat.id, f'Camera {camera_id} selected')
+
+    bot.send_message(message.chat.id, f'Enrolling {format_text(mbold(enroll_name))}:\nWrite the list\'s type:\t\n' + \
+                     f'{format_text(hcode("Blacklisted or whitelisted[b / w]"))}')
+
+    bot.register_next_step_handler(message, select_access_type, enroll_name=enroll_name, camera_id=camera_id)
+
+def select_access_type(message, enroll_name:str, camera_id:int ):
     """blacklist or whitelist"""
     print('selecting:', message.text)
     if message.text is None:
         bot.send_message(message.chat.id, 'Nothing selected, aborting')
         return
-
-    if not selected:
-        # show the message to select the access type then register the next step to enroll the person
-        bot.send_message(message.chat.id, f'Enrolling {format_text(mbold(enroll_name))}:\nWrite the list\'s type:\t\n' + \
-                                f'{format_text(hcode("Blacklisted or whitelisted[b / w]"))}')
-        bot.register_next_step_handler(message, select_access_type, selected=True, enroll_name=enroll_name)
-
+    # if the user has chosen a list, then check if it is a valid selection
+    text = message.text.strip().lower()
+    if text in ['b', 'blacklisted', 'black']:
+        bot.send_message(message.chat.id, f'{enroll_name} is being blacklisted')
+        text = 'b'
+    elif text in ['w', 'whitelisted', 'white']:
+        bot.send_message(message.chat.id, f'{enroll_name} is being whitelisted')
+        text = 'w'
     else:
-        # if the user has chosen a list, then check if it is a valid selection
-        text = message.text.strip().lower()
-        if text in ['b', 'blacklisted', 'black']:
-            bot.send_message(message.chat.id, f'{enroll_name} is being blacklisted')
-            text = 'b'
-        elif text in ['w', 'whitelisted', 'white']:
-            bot.send_message(message.chat.id, f'{enroll_name} is being whitelisted')
-            text = 'w'
-        else:
-            bot.send_message(message.chat.id, 'NO selection has been made, aborted')
-            return
+        bot.send_message(message.chat.id, 'NO selection has been made, aborted')
+        return
 
-        bot.send_message(message.chat.id, 'Send a person\'s picture to enroll in the system')
-        bot.register_next_step_handler(message, save_photo, enroll_name=enroll_name, scope=text)
+    bot.send_message(message.chat.id, 'Send a person\'s picture to enroll in the system')
+    bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, camera_id=camera_id, scope=text)
 
-def save_photo(message, enroll_name='', scope=''):
+def enroll_photo_from_user(message, enroll_name:str, scope:str, camera_id:int, retries=3):
+    fr = FaceRecognizer() # TODO get parameters from a config file
+    # it's ok to instantiate everytime the face recognizer, since we are calling it few times in
+    # the scenario, and purpose, of this bot
+
+    if retries == 0:
+        bot.send_message(message.chat.id, 'Too many retries, aborting')
+        return
+    if message.photo is None:
+        bot.send_message(message.chat.id, 'No photo sent, try again')
+        bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, scope=scope, camera_id=camera_id, retries=retries-1)
+        return
+
     file_id = message.photo[-1].file_id
     file_info = bot.get_file(file_id)
     file_path = file_info.file_path
 
+    downloaded_file = bot.download_file(file_path)  # Download the file
+    image = Image.open(BytesIO(downloaded_file))    # convert the file to a PIL image
 
-    downloaded_file = bot.download_file(file_path)
-    full_path = os.path.join(basedir_enroll_path, enroll_name + '.jpg')
-
-    with open(full_path, 'wb') as new_file:
-        new_file.write(downloaded_file)
-
-    # update the db with the new person
-    with DB() as db:
-        db.add_person_room_access(enroll_name, 'PLACEHOLDER', scope) # TODO change the placeholder
-
-    bot.send_message(message.chat.id, f'{enroll_name} enrolled into the system')
-
+    # enroll faces
+    try:
+        bot.send_message(message.chat.id, 'Enrolling face, could take a while...')
+        fr.enroll_face(image, enroll_name)
+        # update the db with the new person
+        with DB() as db:
+            db.add_person_room_access(enroll_name, camera_id=camera_id, listed=scope)  # TODO change the placeholder
+        bot.send_message(message.chat.id, f'{enroll_name} enrolled into the system')
+    except Exception as e:
+        bot.send_message(message.chat.id, f'Invalid image {str(e)}, try again')
+        bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, scope=scope, camera_id=camera_id, retries=retries-1)
+    return
 
 
 def override_image(message, file_path):
