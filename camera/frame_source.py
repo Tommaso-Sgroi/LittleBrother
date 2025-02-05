@@ -1,5 +1,5 @@
 
-from utils.logger import Logger
+from local_utils.logger import Logger
 from abc import ABC, abstractmethod
 from multiprocessing import Process
 

@@ -5,8 +5,8 @@ import numpy as np
 from cv2 import Mat
 from numpy import ndarray
 
-from utils.bbox_utils import merge_overlapping_detections
-from utils.logger import Logger
+from local_utils.bbox_utils import merge_overlapping_detections
+from local_utils.logger import Logger
 
 
 class MotionDetector(Logger):
