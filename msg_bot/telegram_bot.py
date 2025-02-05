@@ -101,29 +101,80 @@ def remove_person(message):
         db.delete_person_access_room(remove_name)
     bot.send_message(message.chat.id, f'{remove_name} removed from the system')
 
-
 @bot.message_handler(commands=['enroll'])
 @require_auth(bot=bot, db=DB)
-def enroll_user(message):
-    enroll_name = message.text.split(' ')
-    del enroll_name[0]
-    enroll_name = ' '.join(enroll_name).strip()
+def enroll_person(message):
+    bot.send_message(message.chat.id, 'Type the name of the person you want to enroll')
+    bot.register_next_step_handler(message, enroll_user)
 
-    if enroll_name == '':
-        bot.send_message(message.chat.id, 'No name typed, aborting')
+
+def enroll_user(message, override_enrollment=False, enroll_person_name=''):
+    def get_override_answer(msg, enroll_name):
+        if msg.text is None:
+            bot.send_message(msg.chat.id, 'Nothing typed, aborting')
+            return
+        msg.text = msg.text.lower()
+        if msg.text in ['y', 'yes']:
+            enroll_user(msg, True, enroll_name)
+        elif msg.text in ['n', 'no']:
+            bot.send_message(msg.chat.id, 'No override applied, operation aborted')
+        else:
+            bot.send_message(msg.chat.id, 'Invalid answer, type [yes/y] or [no/n]')
+            bot.register_next_step_handler(msg, get_override_answer, enroll_name)
+
+    if message.text is None:
+        bot.send_message(message.chat.id, 'Nothing typed, aborting')
+        enroll_person(message)
         return
-    with DB() as db:
-        if db.person_already_enrolled(enroll_name):
-            bot.send_message(message.chat.id, f'{enroll_name} already enrolled into the system')
-            return
-        cameras = db.get_cameras()
-        if len(cameras) == 0:
-            bot.send_message(message.chat.id, 'No cameras available, aborting')
-            return
-        # bot.send_message(message.chat.id, f"Write the #camera from the following '{cameras}' to enroll the person")
-    bot.send_message(message.chat.id, f"Send the photo of ({enroll_name}) the person to enroll in the system")
-    bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name)
 
+    enroll_person_name = message.text.strip() if enroll_person_name == '' else enroll_person_name
+    with DB() as db:
+        if not override_enrollment and db.person_already_enrolled(enroll_person_name):
+            bot.send_message(message.chat.id, f'{enroll_person_name} already enrolled into the system, do you want to override the image? [y/n]')
+            bot.register_next_step_handler(message, get_override_answer, enroll_person_name)
+            return
+    bot.send_message(message.chat.id, f"Send a photo with {enroll_person_name} face to enroll in the system")
+    bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_person_name, override=override_enrollment)
+
+# def enroll_photo_from_user(message, enroll_name:str, scope:str, camera_id:int, retries=3):
+def enroll_photo_from_user(message, enroll_name: str, override=False, retries=3):
+
+    fr = FaceRecognizer()
+    # it's ok to instantiate everytime the face recognizer, since we are calling it few times in
+    # the scenario, and purpose, of this bot
+
+    if retries == 0:
+        bot.send_message(message.chat.id, 'Too many retries, aborting')
+        return
+    if message.photo is None:
+        bot.send_message(message.chat.id, 'No photo sent, try again')
+        # bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, scope=scope, camera_id=camera_id, retries=retries-1)
+        bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, retries=retries-1)
+        return
+
+    file_id = message.photo[-1].file_id
+    file_info = bot.get_file(file_id)
+    file_path = file_info.file_path
+
+    downloaded_file = bot.download_file(file_path)  # Download the file
+    image = Image.open(BytesIO(downloaded_file))    # convert the file to a PIL image
+
+    # enroll faces
+    try:
+        bot.send_message(message.chat.id, 'Enrolling face, could take a while...')
+        fr.enroll_face(image, enroll_name)
+        # update the db with the new person
+        if not override:
+            with DB() as db:
+                # TODO db do not raise any exception if the person is already enrolled
+                db.add_enrolled_person(enroll_name)
+            # db.add_person_room_access(enroll_name, camera_id=camera_id, listed=scope)  # TODO change the placeholder
+        bot.send_message(message.chat.id, f'{enroll_name} enrolled into the system')
+    except Exception as e:
+        bot.send_message(message.chat.id, f'Invalid image {str(e)}, try again')
+        # bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, scope=scope, camera_id=camera_id, retries=retries-1)
+        bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, retries=retries-1)
+    return
 
 def select_camera(message, enroll_name=''):
     print('selecting camera')
@@ -171,44 +222,7 @@ def select_access_type(message, enroll_name:str, camera_id:int ):
     bot.send_message(message.chat.id, 'Send a person\'s picture to enroll in the system')
     bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, camera_id=camera_id, scope=text)
 
-# def enroll_photo_from_user(message, enroll_name:str, scope:str, camera_id:int, retries=3):
-def enroll_photo_from_user(message, enroll_name: str, retries=3):
 
-    fr = FaceRecognizer() # TODO get parameters from a config file
-    # it's ok to instantiate everytime the face recognizer, since we are calling it few times in
-    # the scenario, and purpose, of this bot
-
-    if retries == 0:
-        bot.send_message(message.chat.id, 'Too many retries, aborting')
-        return
-    if message.photo is None:
-        bot.send_message(message.chat.id, 'No photo sent, try again')
-        # bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, scope=scope, camera_id=camera_id, retries=retries-1)
-        bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, retries=retries-1)
-
-        return
-
-    file_id = message.photo[-1].file_id
-    file_info = bot.get_file(file_id)
-    file_path = file_info.file_path
-
-    downloaded_file = bot.download_file(file_path)  # Download the file
-    image = Image.open(BytesIO(downloaded_file))    # convert the file to a PIL image
-
-    # enroll faces
-    try:
-        bot.send_message(message.chat.id, 'Enrolling face, could take a while...')
-        fr.enroll_face(image, enroll_name)
-        # update the db with the new person
-        with DB() as db:
-            db.add_enrolled_person(enroll_name)
-            # db.add_person_room_access(enroll_name, camera_id=camera_id, listed=scope)  # TODO change the placeholder
-        bot.send_message(message.chat.id, f'{enroll_name} enrolled into the system')
-    except Exception as e:
-        bot.send_message(message.chat.id, f'Invalid image {str(e)}, try again')
-        # bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, scope=scope, camera_id=camera_id, retries=retries-1)
-        bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, retries=retries-1)
-    return
 
 
 def override_image(message, file_path):

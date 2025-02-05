@@ -38,6 +38,7 @@ class TDBAtomicConnection(l.Logger):
     This class is necessary to handle the fact that the telegram bot spawn multiple threads and
      sqlite3 doesn't really like that.
     """
+    # TODO no exception raising
     def __init__(self, db_path: str):
         super().__init__(self.__class__.__name__)
         self.conn = sqlite3.connect(db_path)
