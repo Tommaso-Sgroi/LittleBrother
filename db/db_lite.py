@@ -59,6 +59,7 @@ class TDBAtomicConnection(l.Logger):
                 DROP TABLE IF EXISTS AccessList;
                 DROP TABLE IF EXISTS Users;
                 DROP TABLE IF EXISTS Cameras;
+                DROP TABLE IF EXISTS EnrolledPeople;
             """)
             self.conn.commit()
         except Exception as e:
@@ -78,6 +79,11 @@ class TDBAtomicConnection(l.Logger):
             -- the user_id is the telegram user id
             user_id INTEGER UNSIGNED PRIMARY KEY
         );      
+        CREATE TABLE IF NOT EXISTS EnrolledPeople (
+            -- registers the names of the people enrolled in the system
+            user_name TEXT PRIMARY KEY
+        );
+              
         CREATE TABLE IF NOT EXISTS Cameras (
             -- handles the registered cameras, so the cameras which can access the system and are
             camera_id INTEGER UNSIGNED PRIMARY KEY,
@@ -93,6 +99,7 @@ class TDBAtomicConnection(l.Logger):
             camera_id INTEGER UNSIGNED, 
             listed VARCHAR(1) NOT NULL CHECK(listed IN ('b','w')) DEFAULT 'b',
             FOREIGN KEY (camera_id) REFERENCES Cameras(camera_id) ON DELETE CASCADE,
+            FOREIGN KEY (user_name) REFERENCES EnrolledPeople(user_name) ON DELETE CASCADE,
             PRIMARY KEY (user_name, camera_id)
             );
         """
@@ -148,7 +155,7 @@ class TDBAtomicConnection(l.Logger):
         """Person enrolled in the system, this is not the user"""
         cursor = self.get_cursor()
         try:
-            cursor.execute("SELECT COUNT(user_name) FROM AccessList WHERE user_name=? LIMIT 1", (user_name,))
+            cursor.execute("SELECT COUNT(user_name) FROM EnrolledPeople WHERE user_name=? LIMIT 1", (user_name,))
             user_count = cursor.fetchone()[0]
             return bool(user_count)
         except Exception as e:
@@ -173,8 +180,9 @@ class TDBAtomicConnection(l.Logger):
     def get_people_access_names(self):
         cursor = self.get_cursor()
         try:
-            cursor.execute("SELECT UNIQUE(user_name) FROM AccessList")
-            return cursor.fetchall()
+            cursor.execute("SELECT DISTINCT (user_name) AS names FROM AccessList")
+            names = cursor.fetchall()
+            return [name[0] for name in names]
         except Exception as e:
             self.logger.error("Error fetching all user names from access list: %s", e)
         finally:
@@ -208,6 +216,16 @@ class TDBAtomicConnection(l.Logger):
             self.conn.commit()
         except Exception as e:
             self.logger.error("Error during camera insertion: %s", e)
+        finally:
+            cursor.close()
+
+    def add_enrolled_person(self, user_name: str):
+        cursor = self.get_cursor()
+        try:
+            cursor.execute("INSERT INTO EnrolledPeople (user_name) VALUES (?)", (user_name,))
+            self.conn.commit()
+        except Exception as e:
+            self.logger.error("Error during user insertion: %s", e)
         finally:
             cursor.close()
 
@@ -253,10 +271,10 @@ class TDBAtomicConnection(l.Logger):
             cursor.close()
 
     # Delete from db
-    def delete_person_access_room(self, user_name: str, camera_id: int):
+    def delete_person_access_room(self, user_name: str):
         cursor = self.get_cursor()
         try:
-            cursor.execute("DELETE FROM AccessList WHERE camera_id=? AND user_name=?;", (camera_id, user_name))
+            cursor.execute("DELETE FROM AccessList WHERE user_name=?;", [user_name])
             self.conn.commit()
         except Exception as e:
             self.logger.error("Error during user deletion: %s", e)

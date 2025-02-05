@@ -37,13 +37,16 @@ def send_welcome(message):
 
 @bot.message_handler(commands=['help'])
 def send_help(message):
-    print('help')
     bot.send_message(message.chat.id, "This bot is a telegram bot to get notifications from the camera system\n"+\
                         "You can use the following commands:\n"+\
-                        "/start - Start the bot\n"+\
-                        "/help - Show this message\n"+\
-                        "/auth - Authenticate with your given access token\n"+\
-                        "/enroll [name] - Enroll new person in the system\n"+\
+                        "\t/start - Start the bot\n"+\
+                        "\t/help - Show this message\n"+\
+                        "\t/auth - Authenticate with your given access token\n"+\
+                        "\t/enroll [name] - Enroll new person in the system\n"+\
+                        "\t/list - List all the people enrolled in the system\n"+\
+                        "\t/remove [name] - Remove a person from the system\n"+\
+                        "\t/pedit [name] - edit a person name enrolled into the system"+\
+                        "\t/cedit [#camera] - edit a camera name\n"+\
                         "")
 
 @bot.message_handler(commands=['auth'])
@@ -68,6 +71,34 @@ def auth_user(message):
     bot.register_next_step_handler(message, authenticate_user)
 
 
+@bot.message_handler(commands=['list'])
+@require_auth(bot=bot, db=DB)
+def list_people(message):
+    with DB() as db:
+        people = db.get_people_access_names()
+        print(people)
+    if len(people) == 0:
+        bot.send_message(message.chat.id, 'No people enrolled in the system')
+        return
+    bot.send_message(message.chat.id, 'People enrolled in the system:\n\t-' + '\n\t-'.join(people))
+
+@bot.message_handler(commands=['remove'])
+@require_auth(bot=bot, db=DB)
+def remove_person(message):
+    remove_name = message.text.split(' ')
+    del remove_name[0]
+    remove_name = ' '.join(remove_name).strip()
+
+    if remove_name == '':
+        bot.send_message(message.chat.id, 'No name typed, aborting')
+        return
+    with DB() as db:
+        if not db.person_already_enrolled(remove_name):
+            bot.send_message(message.chat.id, f'{remove_name} not enrolled into the system.\n you can list them with /list')
+            return
+        bot.send_message(message.chat.id, f"Removing {remove_name} from the system")
+        db.delete_person_access_room(remove_name)
+    bot.send_message(message.chat.id, f'{remove_name} removed from the system')
 
 
 @bot.message_handler(commands=['enroll'])
@@ -88,8 +119,9 @@ def enroll_user(message):
         if len(cameras) == 0:
             bot.send_message(message.chat.id, 'No cameras available, aborting')
             return
-        bot.send_message(message.chat.id, f"Write the #camera from the following '{cameras}' to enroll the person")
-    bot.register_next_step_handler(message, select_camera, enroll_name=enroll_name)
+        # bot.send_message(message.chat.id, f"Write the #camera from the following '{cameras}' to enroll the person")
+    bot.send_message(message.chat.id, f"Send the photo of ({enroll_name}) the person to enroll in the system")
+    bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name)
 
 
 def select_camera(message, enroll_name=''):
@@ -138,7 +170,9 @@ def select_access_type(message, enroll_name:str, camera_id:int ):
     bot.send_message(message.chat.id, 'Send a person\'s picture to enroll in the system')
     bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, camera_id=camera_id, scope=text)
 
-def enroll_photo_from_user(message, enroll_name:str, scope:str, camera_id:int, retries=3):
+# def enroll_photo_from_user(message, enroll_name:str, scope:str, camera_id:int, retries=3):
+def enroll_photo_from_user(message, enroll_name: str, retries=3):
+
     fr = FaceRecognizer() # TODO get parameters from a config file
     # it's ok to instantiate everytime the face recognizer, since we are calling it few times in
     # the scenario, and purpose, of this bot
@@ -148,7 +182,9 @@ def enroll_photo_from_user(message, enroll_name:str, scope:str, camera_id:int, r
         return
     if message.photo is None:
         bot.send_message(message.chat.id, 'No photo sent, try again')
-        bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, scope=scope, camera_id=camera_id, retries=retries-1)
+        # bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, scope=scope, camera_id=camera_id, retries=retries-1)
+        bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, retries=retries-1)
+
         return
 
     file_id = message.photo[-1].file_id
@@ -164,11 +200,13 @@ def enroll_photo_from_user(message, enroll_name:str, scope:str, camera_id:int, r
         fr.enroll_face(image, enroll_name)
         # update the db with the new person
         with DB() as db:
-            db.add_person_room_access(enroll_name, camera_id=camera_id, listed=scope)  # TODO change the placeholder
+            db.add_enrolled_person(enroll_name)
+            # db.add_person_room_access(enroll_name, camera_id=camera_id, listed=scope)  # TODO change the placeholder
         bot.send_message(message.chat.id, f'{enroll_name} enrolled into the system')
     except Exception as e:
         bot.send_message(message.chat.id, f'Invalid image {str(e)}, try again')
-        bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, scope=scope, camera_id=camera_id, retries=retries-1)
+        # bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, scope=scope, camera_id=camera_id, retries=retries-1)
+        bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, retries=retries-1)
     return
 
 
