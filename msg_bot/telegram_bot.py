@@ -43,6 +43,7 @@ def send_help(message):
                         "\t/help - Show this message\n"+\
                         "\t/auth - Authenticate with your given access token\n"+\
                         "\t/enroll [name] - Enroll new person in the system\n"+\
+                        "\t/select - Select a camera for give/remove access the person\n"+\
                         "\t/list - List all the people enrolled in the system\n"+\
                         "\t/remove [name] - Remove a person from the system\n"+\
                         "\t/pedit [name] - edit a person name enrolled into the system"+\
