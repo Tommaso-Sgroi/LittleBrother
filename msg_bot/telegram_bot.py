@@ -5,6 +5,7 @@ from venv import logger
 import telebot
 import telebot.types as types
 from telebot.formatting import format_text, mbold, hcode
+from pathlib import Path
 from logging import DEBUG, INFO
 from random import randint
 from msg_bot.utils import require_auth
@@ -34,17 +35,56 @@ class CommandName:
     QueryMessageType.<YourType> + '_' + <YourData> + '_' + <YourData> + ...
     """
     LIST_PEOPLE = 'list'
+    BACK_TO_LIST_PEOPLE = 'back-list'
     GET_ACCESS_TYPE = 'get-access-type'
     SELECT_ACCESS = 'select-access'
     CHANGE_ACCESS = 'change-access'
+    REMOVE_PERSON_ENROLLMENT = 'remove-p-e'
+    ABORT = 'abort'
 
     @staticmethod
-    def compose(type, *data) -> str:
-        return f'{type}_' + '_'.join(data)
+    def join_data(*data) -> str:
+        return '_'.join(data)
 
     @staticmethod
     def decompose(data) -> list[str]:
         return data.split('_')
+
+    @staticmethod
+    def very_quick_markup_callback(keys: list, *data, row_width: int = 2) -> types.InlineKeyboardMarkup:
+        """Very quick markup, only for callback_data"""
+        markup = telebot.util.quick_markup({
+            key: {'callback_data': CommandName.join_data(data)} for key in keys
+        }, row_width=row_width)
+
+        return markup
+
+
+def add_back_button(query_type: str, markup: types.InlineKeyboardMarkup, *data):
+    data = CommandName.join_data(query_type, *data)
+    markup.add(types.InlineKeyboardButton('Back', callback_data=data))
+    return markup
+
+
+def add_abort_button(markup: types.InlineKeyboardMarkup):
+    data = CommandName.join_data(CommandName.ABORT)
+    markup.add(types.InlineKeyboardButton('Back', callback_data=data))
+    return markup
+
+
+@bot.callback_query_handler(func=lambda call: filter_callback_query(call, CommandName.ABORT))
+def abort_callback_query(call: types.CallbackQuery):
+    bot.answer_callback_query(call.id, "")
+    bot.delete_message(message_id=call.message.id, chat_id=call.message.chat.id)
+    return
+
+
+def empty_answer_callback_query(call: types.CallbackQuery):
+    """
+    Just a workaround to avoid the pressed button to be highlighted for a long time
+    """
+    bot.answer_callback_query(call.id, "")
+
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -102,10 +142,11 @@ def list_people(message):
         return
     # convert the list of people to {text: kwargs} {str:}
     markup = telebot.util.quick_markup({
-        p_name: {'callback_data': '_'.join((query_type, p_name))} for p_name in people
+        p_name: {'callback_data': CommandName.join_data(query_type, p_name)} for p_name in people
     }, row_width=1)
-
+    markup = add_abort_button(markup)
     bot.send_message(message.chat.id, 'People enrolled into the system', reply_markup=markup)
+
 
 # ------------------- CALLBACKS QUERIES -------------------
 def filter_callback_query(call: types.CallbackQuery, query_type: str) -> bool:
@@ -116,8 +157,21 @@ def filter_callback_query(call: types.CallbackQuery, query_type: str) -> bool:
         return True
     return False
 
+
+def override_call_message_id_with_from_user_id(call: types.CallbackQuery):
+    call.message.from_user.id = call.from_user.id
+    return call
+
+
+@bot.callback_query_handler(func=lambda call: filter_callback_query(call, CommandName.BACK_TO_LIST_PEOPLE))
+def back_to_list_people(call: types.CallbackQuery):
+    call = override_call_message_id_with_from_user_id(call)
+    empty_answer_callback_query(call)
+    list_people(call.message)
+
+
 @bot.callback_query_handler(func=lambda call: filter_callback_query(call, CommandName.LIST_PEOPLE))
-def select_person(call: types.CallbackQuery): # <- passes a CallbackQuery type object to your function
+def select_person(call: types.CallbackQuery):  # <- passes a CallbackQuery type object to your function
     """Show person information, about his access to the rooms"""
     bot.answer_callback_query(call.id, "Selected {}".format(*call.data))
     assert len(call.data) == 1
@@ -131,16 +185,16 @@ def select_person(call: types.CallbackQuery): # <- passes a CallbackQuery type o
     query_type = CommandName.CHANGE_ACCESS
     markup = telebot.util.quick_markup({
         f' {BLACK_LISTED if listed == "b" else WHITE_LISTED} - {camera_name}':
-            {'callback_data': '_'.join((query_type, user_name, str(camera_id), listed))}
+            {'callback_data': CommandName.join_data(query_type, user_name, str(camera_id), listed)}
         # i hate python :(
         for user_name, camera_id, camera_name, listed in access_list
     }, row_width=2)
-
-    print(markup)
+    markup = add_abort_button(markup)
     bot.send_message(call.message.chat.id, f'{username} accesses', reply_markup=markup)
 
+
 @bot.callback_query_handler(func=lambda call: filter_callback_query(call, CommandName.CHANGE_ACCESS))
-def select_person(call: types.CallbackQuery): # <- passes a CallbackQuery type object to your function
+def select_person(call: types.CallbackQuery):  # <- passes a CallbackQuery type object to your function
     """Show person information, about his access to the rooms"""
     assert len(call.data) == 3
     username, camera_id, listed = call.data
@@ -152,12 +206,14 @@ def select_person(call: types.CallbackQuery): # <- passes a CallbackQuery type o
     bot.answer_callback_query(call.id, "")
 
     query_type = CommandName.CHANGE_ACCESS
+
     markup = telebot.util.quick_markup({
         f' {BLACK_LISTED if listed == "b" else WHITE_LISTED} - {camera_name}':
-            {'callback_data': '_'.join((query_type, user_name, str(camera_id), listed))}
+            {'callback_data': CommandName.join_data(query_type, user_name, str(camera_id), listed)}
         # i hate python2.0 :(
         for user_name, camera_id, camera_name, listed in access_list
     }, row_width=2)
+    markup = add_back_button(CommandName.BACK_TO_LIST_PEOPLE, markup)
 
     bot.send_message(call.message.chat.id, f'{username} accesses', reply_markup=markup)
 
@@ -166,22 +222,44 @@ def select_person(call: types.CallbackQuery): # <- passes a CallbackQuery type o
 
 @bot.message_handler(commands=['remove'])
 @require_auth(bot=bot, db=DB)
-def remove_person(message):
-    remove_name = message.text.split(' ')
-    del remove_name[0]
-    remove_name = ' '.join(remove_name).strip()
-
-    if remove_name == '':
-        bot.send_message(message.chat.id, 'No name typed, aborting')
-        return
+def remove_person_list(message):
+    query_type = CommandName.REMOVE_PERSON_ENROLLMENT
     with DB() as db:
-        if not db.person_already_enrolled(remove_name):
-            bot.send_message(message.chat.id,
-                             f'{remove_name} not enrolled into the system.\n you can list them with /list')
-            return
-        bot.send_message(message.chat.id, f"Removing {remove_name} from the system")
-        db.delete_person_access_room(remove_name)
-    bot.send_message(message.chat.id, f'{remove_name} removed from the system')
+        people = db.get_people_access_names()
+    if len(people) == 0:
+        bot.send_message(message.chat.id, 'No people enrolled in the system')
+        return
+    # convert the list of people to {text: kwargs} {str:}
+    markup = telebot.util.quick_markup({
+        p_name: {'callback_data': CommandName.join_data(query_type, p_name)} for p_name in people
+    }, row_width=1)
+    markup = add_abort_button(markup)
+    bot.send_message(message.chat.id, 'Select the people to remove from the system', reply_markup=markup)
+
+
+@bot.callback_query_handler(func=lambda call: filter_callback_query(call, CommandName.REMOVE_PERSON_ENROLLMENT))
+def remove_person(call: types.CallbackQuery):
+    query_type = CommandName.REMOVE_PERSON_ENROLLMENT
+    assert len(call.data) == 1
+    username = call.data[0]
+    try:
+        with DB() as db:
+            db.delete_person_access_room(username)
+
+            enrolls = os.listdir(basedir_enroll_path)
+            for enroll in enrolls:
+                enroll_stem = Path(enroll).stem
+                if username == enroll_stem:
+                    # os.remove(os.path.join(basedir_enroll_path, enroll))
+                    break
+    except Exception as e:
+        bot.answer_callback_query(call.id, f'Error: {str(e)}')
+        logger.error(f'Cannot delete person from the enrollment %s:', e)
+        return
+    bot.answer_callback_query(call.id, f'{username} removed from the system')
+    # this is a very bad approach, but it's a workaround for now
+    call.message.from_user.id = call.from_user.id
+    remove_person_list(call.message)
 
 
 # ------------------- ENROLLMENT -------------------
@@ -212,7 +290,7 @@ def enroll_user(message, override_enrollment=False, enroll_person_name=''):
         return
 
     enroll_person_name = message.text.strip() if enroll_person_name == '' else enroll_person_name
-    if  re.fullmatch(r'([a-zA-Z0-9](\s)?)+', enroll_person_name) is None:
+    if re.fullmatch(r'([a-zA-Z0-9](\s)?)+', enroll_person_name) is None:
         bot.send_message(message.chat.id, 'Invalid name, only letters and spaces allowed')
         enroll_person(message)
         return
@@ -343,7 +421,14 @@ def echo_all(message):
     }
     bot.send_photo(userid, telebot.types.InputFile(
         os.path.join('.', 'datasets', pics[randint(1, 4)] + '.jpg')
-           ))
+    ))
 
+
+if __name__ == '__main__':
+    with DB() as db:
+        db.add_camera(1, 'camera1')
+        db.add_camera(2, 'camera2')
+        db.add_camera(3, 'camera3')
+        db.add_camera(4, 'camera4')
 
 bot.infinity_polling(logger_level=DEBUG)
