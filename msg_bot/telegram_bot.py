@@ -1,8 +1,9 @@
 import os
+from os import access
 from venv import logger
 
 import telebot
-import telebot.types
+import telebot.types as types
 from telebot.formatting import format_text, mbold, hcode
 from logging import DEBUG, INFO
 from random import randint
@@ -11,6 +12,7 @@ from db.db_lite import TBDatabase
 from face_recognizer.face_recognizer import FaceRecognizer
 from io import BytesIO
 from PIL import Image
+
 '''
 This code is a bit rushed and must, i repeat MUST, be refactored to be at least something apparently good
 '''
@@ -19,36 +21,52 @@ bot = telebot.TeleBot(os.getenv("TELEGRAM_BOT_TOKEN"))
 DB = TBDatabase('database.db', drop_db=False)
 
 auth_token = os.getenv("AUTH_TOKEN")
-basedir_enroll_path = './registered_faces' # TODO change to an actual option
-# authed_users = []
-# logger = None
-# logging_level = DEBUG
-#
-# def _init_logger():
-#     from utils.logger import get_logger
-#     global logger, logging_level
-#     logger = get_logger(__name__)
-#     logger.setLevel(logging_level)
+basedir_enroll_path = './registered_faces'  # TODO change to an actual option
+
+BLACK_LISTED, WHITE_LISTED = u'\U00002b1b', u'\U00002b1c'
+
+
+# constants, message query types
+class CommandName:
+    """
+    Workaround for tag data in callback_query_handler to filter the type of message.
+    The data field returned by the InlineKeyboardMarkup must be:
+    QueryMessageType.<YourType> + '_' + <YourData> + '_' + <YourData> + ...
+    """
+    LIST_PEOPLE = 'list'
+    GET_ACCESS_TYPE = 'get-access-type'
+    SELECT_ACCESS = 'select-access'
+    CHANGE_ACCESS = 'change-access'
+
+    @staticmethod
+    def compose(type, *data) -> str:
+        return f'{type}_' + '_'.join(data)
+
+    @staticmethod
+    def decompose(data) -> list[str]:
+        return data.split('_')
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     print('start')
     bot.send_message(message.chat.id, "Howdy, how are you doing?")
 
+
 @bot.message_handler(commands=['help'])
 def send_help(message):
-    bot.send_message(message.chat.id, "This bot is a telegram bot to get notifications from the camera system\n"+\
-                        "You can use the following commands:\n"+\
-                        "\t/start - Start the bot\n"+\
-                        "\t/help - Show this message\n"+\
-                        "\t/auth - Authenticate with your given access token\n"+\
-                        "\t/enroll [name] - Enroll new person in the system\n"+\
-                        "\t/select - Select a camera for give/remove access the person\n"+\
-                        "\t/list - List all the people enrolled in the system\n"+\
-                        "\t/remove [name] - Remove a person from the system\n"+\
-                        "\t/pedit [name] - edit a person name enrolled into the system"+\
-                        "\t/cedit [#camera] - edit a camera name\n"+\
-                        "")
+    bot.send_message(message.chat.id, "This bot is a telegram bot to get notifications from the camera system\n" + \
+                     "You can use the following commands:\n" + \
+                     "\t/start - Start the bot\n" + \
+                     "\t/help - Show this message\n" + \
+                     "\t/auth - Authenticate with your given access token\n" + \
+                     "\t/enroll [name] - Enroll new person in the system\n" + \
+                     "\t/select - Select a camera for give/remove access the person\n" + \
+                     "\t/list - List all the people enrolled in the system\n" + \
+                     "\t/remove [name] - Remove a person from the system\n" + \
+                     "\t/pedit [name] - edit a person name enrolled into the system" + \
+                     "\t/cedit [#camera] - edit a camera name\n" + \
+                     "")
+
 
 @bot.message_handler(commands=['auth'])
 def auth_user(message):
@@ -72,16 +90,81 @@ def auth_user(message):
     bot.register_next_step_handler(message, authenticate_user)
 
 
-@bot.message_handler(commands=['list'])
+@bot.message_handler(commands=[CommandName.LIST_PEOPLE])
 @require_auth(bot=bot, db=DB)
 def list_people(message):
+    query_type = CommandName.LIST_PEOPLE
+
     with DB() as db:
         people = db.get_people_access_names()
-        print(people)
     if len(people) == 0:
         bot.send_message(message.chat.id, 'No people enrolled in the system')
         return
-    bot.send_message(message.chat.id, 'People enrolled in the system:\n\t-' + '\n\t-'.join(people))
+    # convert the list of people to {text: kwargs} {str:}
+    markup = telebot.util.quick_markup({
+        p_name: {'callback_data': '_'.join((query_type, p_name))} for p_name in people
+    }, row_width=1)
+    # Ora, se l’utente clicca "Search Cats", Telegram aprirà la modalità inline
+    # con il testo "@myBot cat" già impostato, mostrando i risultati “cat”.
+
+    bot.send_message(message.chat.id, 'People enrolled into the system', reply_markup=markup)
+
+# ------------------- CALLBACKS QUERIES -------------------
+def filter_callback_query(call: types.CallbackQuery, query_type: str) -> bool:
+    data = CommandName.decompose(call.data)
+    if query_type == data[0]:
+        del data[0]
+        call.data = data
+        return True
+    return False
+
+@bot.callback_query_handler(func=lambda call: filter_callback_query(call, CommandName.LIST_PEOPLE))
+def select_person(call: types.CallbackQuery): # <- passes a CallbackQuery type object to your function
+    """Show person information, about his access to the rooms"""
+    bot.answer_callback_query(call.id, "Selected {}".format(*call.data))
+    assert len(call.data) == 1
+    username = call.data[0]
+    with DB() as db:
+        access_list = db.get_person_rooms_access_list(username)
+    if len(access_list) == 0:
+        bot.send_message(call.message.chat.id, f'{username} has no access to any room')
+        return
+    # access_list is a list of [user_name, camera_id, camera_name, listed]
+    query_type = CommandName.CHANGE_ACCESS
+    markup = telebot.util.quick_markup({
+        f' {BLACK_LISTED if listed == "b" else WHITE_LISTED} - {camera_name}':
+            {'callback_data': '_'.join((query_type, user_name, str(camera_id), listed))}
+        # i hate python :(
+        for user_name, camera_id, camera_name, listed in access_list
+    }, row_width=2)
+
+    print(markup)
+    bot.send_message(call.message.chat.id, f'{username} accesses', reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: filter_callback_query(call, CommandName.CHANGE_ACCESS))
+def select_person(call: types.CallbackQuery): # <- passes a CallbackQuery type object to your function
+    """Show person information, about his access to the rooms"""
+    assert len(call.data) == 3
+    username, camera_id, listed = call.data
+
+    with DB() as db:
+        listed = 'w' if listed == 'b' else 'b'
+        db.update_person_access_list(username, int(camera_id), listed)
+        access_list = db.get_person_rooms_access_list(username)
+    bot.answer_callback_query(call.id, "")
+
+    query_type = CommandName.CHANGE_ACCESS
+    markup = telebot.util.quick_markup({
+        f' {BLACK_LISTED if listed == "b" else WHITE_LISTED} - {camera_name}':
+            {'callback_data': '_'.join((query_type, user_name, str(camera_id), listed))}
+        # i hate python2.0 :(
+        for user_name, camera_id, camera_name, listed in access_list
+    }, row_width=2)
+
+    bot.send_message(call.message.chat.id, f'{username} accesses', reply_markup=markup)
+
+
+# ------------------- MESSAGE HANDLERS -------------------
 
 @bot.message_handler(commands=['remove'])
 @require_auth(bot=bot, db=DB)
@@ -95,12 +178,15 @@ def remove_person(message):
         return
     with DB() as db:
         if not db.person_already_enrolled(remove_name):
-            bot.send_message(message.chat.id, f'{remove_name} not enrolled into the system.\n you can list them with /list')
+            bot.send_message(message.chat.id,
+                             f'{remove_name} not enrolled into the system.\n you can list them with /list')
             return
         bot.send_message(message.chat.id, f"Removing {remove_name} from the system")
         db.delete_person_access_room(remove_name)
     bot.send_message(message.chat.id, f'{remove_name} removed from the system')
 
+
+# ------------------- ENROLLMENT -------------------
 @bot.message_handler(commands=['enroll'])
 @require_auth(bot=bot, db=DB)
 def enroll_person(message):
@@ -130,15 +216,17 @@ def enroll_user(message, override_enrollment=False, enroll_person_name=''):
     enroll_person_name = message.text.strip() if enroll_person_name == '' else enroll_person_name
     with DB() as db:
         if not override_enrollment and db.person_already_enrolled(enroll_person_name):
-            bot.send_message(message.chat.id, f'{enroll_person_name} already enrolled into the system, do you want to override the image? [y/n]')
+            bot.send_message(message.chat.id,
+                             f'{enroll_person_name} already enrolled into the system, do you want to override the image? [y/n]')
             bot.register_next_step_handler(message, get_override_answer, enroll_person_name)
             return
     bot.send_message(message.chat.id, f"Send a photo with {enroll_person_name} face to enroll in the system")
-    bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_person_name, override=override_enrollment)
+    bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_person_name,
+                                   override=override_enrollment)
+
 
 # def enroll_photo_from_user(message, enroll_name:str, scope:str, camera_id:int, retries=3):
 def enroll_photo_from_user(message, enroll_name: str, override=False, retries=3):
-
     fr = FaceRecognizer()
     # it's ok to instantiate everytime the face recognizer, since we are calling it few times in
     # the scenario, and purpose, of this bot
@@ -149,7 +237,7 @@ def enroll_photo_from_user(message, enroll_name: str, override=False, retries=3)
     if message.photo is None:
         bot.send_message(message.chat.id, 'No photo sent, try again')
         # bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, scope=scope, camera_id=camera_id, retries=retries-1)
-        bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, retries=retries-1)
+        bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, retries=retries - 1)
         return
 
     file_id = message.photo[-1].file_id
@@ -157,7 +245,7 @@ def enroll_photo_from_user(message, enroll_name: str, override=False, retries=3)
     file_path = file_info.file_path
 
     downloaded_file = bot.download_file(file_path)  # Download the file
-    image = Image.open(BytesIO(downloaded_file))    # convert the file to a PIL image
+    image = Image.open(BytesIO(downloaded_file))  # convert the file to a PIL image
 
     # enroll faces
     try:
@@ -173,8 +261,9 @@ def enroll_photo_from_user(message, enroll_name: str, override=False, retries=3)
     except Exception as e:
         bot.send_message(message.chat.id, f'Invalid image {str(e)}, try again')
         # bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, scope=scope, camera_id=camera_id, retries=retries-1)
-        bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, retries=retries-1)
+        bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, retries=retries - 1)
     return
+
 
 def select_camera(message, enroll_name=''):
     print('selecting camera')
@@ -201,7 +290,8 @@ def select_camera(message, enroll_name=''):
 
     bot.register_next_step_handler(message, select_access_type, enroll_name=enroll_name, camera_id=camera_id)
 
-def select_access_type(message, enroll_name:str, camera_id:int ):
+
+def select_access_type(message, enroll_name: str, camera_id: int):
     """blacklist or whitelist"""
     print('selecting:', message.text)
     if message.text is None:
@@ -220,9 +310,8 @@ def select_access_type(message, enroll_name:str, camera_id:int ):
         return
 
     bot.send_message(message.chat.id, 'Send a person\'s picture to enroll in the system')
-    bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, camera_id=camera_id, scope=text)
-
-
+    bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, camera_id=camera_id,
+                                   scope=text)
 
 
 def override_image(message, file_path):
@@ -239,15 +328,12 @@ def override_image(message, file_path):
         bot.send_message(message.chat.id, 'Wrong answer, aborting...')
 
 
-
-
-
-
-
 @bot.message_handler(func=lambda msg: True)
 def echo_all(message):
     userid = message.from_user.id
     bot.send_message(userid, 'CIAO!')
-    bot.send_photo(userid, telebot.types.InputFile(os.path.join('.', 'datasets', 'spidgame.jpg' if randint(0, 1) else 'goku.jpg')))
+    bot.send_photo(userid, telebot.types.InputFile(
+        os.path.join('.', 'datasets', 'spidgame.jpg' if randint(0, 1) else 'goku.jpg')))
+
 
 bot.infinity_polling(logger_level=DEBUG)
