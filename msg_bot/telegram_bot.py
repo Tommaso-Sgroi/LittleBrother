@@ -23,7 +23,7 @@ DB = TBDatabase('database.db', drop_db=False)
 auth_token = os.getenv("AUTH_TOKEN")
 basedir_enroll_path = './registered_faces'  # TODO change to an actual option
 
-BLACK_LISTED, WHITE_LISTED = u'\U00002b1b', u'\U00002b1c'
+BLACK_LISTED, WHITE_LISTED = u"\U0001F6AB", u"\U00002705"
 
 
 # constants, message query types
@@ -104,8 +104,6 @@ def list_people(message):
     markup = telebot.util.quick_markup({
         p_name: {'callback_data': '_'.join((query_type, p_name))} for p_name in people
     }, row_width=1)
-    # Ora, se l’utente clicca "Search Cats", Telegram aprirà la modalità inline
-    # con il testo "@myBot cat" già impostato, mostrando i risultati “cat”.
 
     bot.send_message(message.chat.id, 'People enrolled into the system', reply_markup=markup)
 
