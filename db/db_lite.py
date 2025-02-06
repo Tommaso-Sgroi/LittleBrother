@@ -50,6 +50,7 @@ class TDBAtomicConnection(l.Logger):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        self.conn.commit()
         self.conn.close()
 
     def get_cursor(self):
@@ -197,7 +198,6 @@ class TDBAtomicConnection(l.Logger):
         cursor = self.get_cursor()
         try:
             cursor.execute("INSERT INTO Users VALUES (?)", (user_id,))
-            self.conn.commit()
         except Exception as e:
             self.logger.error("Error during user insertion: %s", e)
         finally:
@@ -208,7 +208,6 @@ class TDBAtomicConnection(l.Logger):
         try:
             cursor.execute("INSERT INTO AccessList (user_name, camera_id, listed) VALUES (?,?,?)",
                            (user_name, camera_id, listed))
-            self.conn.commit()
         except Exception as e:
             self.logger.error("Error during user insertion: %s", e)
         finally:
@@ -219,7 +218,6 @@ class TDBAtomicConnection(l.Logger):
         try:
             cursor.execute("INSERT INTO Cameras (camera_id, camera_name) VALUES (?, ?)", (camera_id, camera_name,))
             cursor.execute("INSERT INTO AccessList (user_name, camera_id) SELECT DISTINCT (user_name), ? FROM AccessList", (camera_id,))
-            self.conn.commit()
         except Exception as e:
             self.logger.error("Error during camera insertion: %s", e)
         finally:
@@ -230,7 +228,6 @@ class TDBAtomicConnection(l.Logger):
         try:
             # cursor.execute("INSERT INTO EnrolledPeople (user_name) VALUES (?)", (user_name,))
             cursor.execute("INSERT INTO AccessList (user_name, camera_id, listed) SELECT ?, camera_id, 'b' FROM Cameras", (user_name,))
-            self.conn.commit()
         except Exception as e:
             self.logger.error("Cannot enroll person '%s' user insertion: %s", user_name, e)
         finally:
@@ -241,7 +238,6 @@ class TDBAtomicConnection(l.Logger):
         cursor = self.get_cursor()
         try:
             cursor.execute("UPDATE AccessList SET listed=? WHERE user_name=? AND camera_id=?", (listed, user_name, camera_id))
-            self.conn.commit()
         except Exception as e:
             self.logger.error("Error during listed update: %s", e)
         finally:
@@ -251,7 +247,6 @@ class TDBAtomicConnection(l.Logger):
         cursor = self.get_cursor()
         try:
             cursor.execute("UPDATE AccessList SET user_name=? WHERE user_name=?", (new_user_name, old_user_name))
-            self.conn.commit()
         except Exception as e:
             self.logger.error("Error during user name update: %s", e)
         finally:
@@ -261,7 +256,6 @@ class TDBAtomicConnection(l.Logger):
         cursor = self.get_cursor()
         try:
             cursor.execute("UPDATE Cameras SET camera_name=? WHERE camera_id=?", (new_room_name, camera_id))
-            self.conn.commit()
         except Exception as e:
             self.logger.error("Error during room name update: %s", e)
         finally:
@@ -271,7 +265,6 @@ class TDBAtomicConnection(l.Logger):
         cursor = self.get_cursor()
         try:
             cursor.execute("UPDATE Cameras SET camera_name=? WHERE camera_id=?", (new_camera_name, camera_id))
-            self.conn.commit()
         except Exception as e:
             self.logger.error("Error during camera name update: %s", e)
         finally:
@@ -282,7 +275,6 @@ class TDBAtomicConnection(l.Logger):
         cursor = self.get_cursor()
         try:
             cursor.execute("DELETE FROM AccessList WHERE user_name=?;", [user_name])
-            self.conn.commit()
         except Exception as e:
             self.logger.error("Error during enrolled person '%s' deletion: %s", user_name, e)
         finally:
@@ -292,7 +284,6 @@ class TDBAtomicConnection(l.Logger):
         cursor = self.get_cursor()
         try:
             cursor.execute("DELETE FROM Cameras WHERE camera_id=?", (camera_id,))
-            self.conn.commit()
         except Exception as e:
             self.logger.error("Error during camera deletion: %s", e)
         finally:
@@ -303,7 +294,6 @@ class TDBAtomicConnection(l.Logger):
         cursor = self.get_cursor()
         try:
             cursor.execute("DELETE FROM Users WHERE user_id=?", (user_id,))
-            self.conn.commit()
         except Exception as e:
             self.logger.error("Error during user deletion: %s", e)
         finally:
