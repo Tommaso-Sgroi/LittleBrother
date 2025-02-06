@@ -224,6 +224,7 @@ class TDBAtomicConnection(l.Logger):
         cursor = self.get_cursor()
         try:
             cursor.execute("INSERT INTO EnrolledPeople (user_name) VALUES (?)", (user_name,))
+            cursor.execute("INSERT INTO AccessList (user_name, camera_id, listed) SELECT ?, camera_id, 'b' FROM Cameras", (user_name,))
             self.conn.commit()
         except Exception as e:
             self.logger.error("Error during user insertion: %s", e)

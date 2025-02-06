@@ -1,5 +1,5 @@
 import os
-from os import access
+import re
 from venv import logger
 
 import telebot
@@ -79,7 +79,7 @@ def auth_user(message):
                 db.add_authed_user(user_id)
                 bot.send_message(msg.chat.id, "You are now authenticated")
         else:
-            bot.send_message(msg, "Wrong token")
+            bot.send_message(msg.from_user.id, "Wrong token")
 
     with DB() as db:
         if db.user_exist(message.from_user.id):
@@ -212,6 +212,11 @@ def enroll_user(message, override_enrollment=False, enroll_person_name=''):
         return
 
     enroll_person_name = message.text.strip() if enroll_person_name == '' else enroll_person_name
+    if  re.fullmatch(r'([a-zA-Z0-9](\s)?)+', enroll_person_name) is None:
+        bot.send_message(message.chat.id, 'Invalid name, only letters and spaces allowed')
+        enroll_person(message)
+        return
+
     with DB() as db:
         if not override_enrollment and db.person_already_enrolled(enroll_person_name):
             bot.send_message(message.chat.id,
@@ -330,8 +335,15 @@ def override_image(message, file_path):
 def echo_all(message):
     userid = message.from_user.id
     bot.send_message(userid, 'CIAO!')
+    pics = {
+        1: 'goku',
+        2: 'spidgame',
+        3: 'photo_2025-02-06_02-51-06',
+        4: 'photo_2025-02-06_02-52-06',
+    }
     bot.send_photo(userid, telebot.types.InputFile(
-        os.path.join('.', 'datasets', 'spidgame.jpg' if randint(0, 1) else 'goku.jpg')))
+        os.path.join('.', 'datasets', pics[randint(1, 4)] + '.jpg')
+           ))
 
 
 bot.infinity_polling(logger_level=DEBUG)
