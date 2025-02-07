@@ -1,14 +1,17 @@
 import os
 import re
-from venv import logger
+from typing import Union
 
+import numpy as np
 import telebot
 import telebot.types as types
 from telebot.formatting import format_text, mbold, hcode
 from pathlib import Path
 from logging import DEBUG, INFO
 from random import randint
-from msg_bot.utils import require_auth
+
+from local_utils.logger import get_logger
+from msg_bot.utils import require_auth, empty_answer_callback_query, override_call_message_id_with_from_user_id
 from db.db_lite import TBDatabase
 from face_recognizer.face_recognizer import FaceRecognizer
 from io import BytesIO
@@ -20,6 +23,8 @@ This code is a bit rushed and must, i repeat MUST, be refactored to be at least 
 
 bot = telebot.TeleBot(os.getenv("TELEGRAM_BOT_TOKEN"))
 DB = TBDatabase('database.db', drop_db=False)
+
+logger = get_logger(__name__)
 
 auth_token = os.getenv("AUTH_TOKEN")
 basedir_enroll_path = './registered_faces'  # TODO change to an actual option
@@ -59,6 +64,14 @@ class CommandName:
 
         return markup
 
+def filter_callback_query(call: types.CallbackQuery, query_type: str) -> bool:
+    data = CommandName.decompose(call.data)
+    if query_type == data[0]:
+        del data[0]
+        call.data = data
+        return True
+    return False
+
 
 def add_back_button(back_to_query_type: str, markup: types.InlineKeyboardMarkup, *data):
     data = CommandName.join_data(back_to_query_type, *data)
@@ -81,11 +94,30 @@ def abort_callback_query(call: types.CallbackQuery):
     return
 
 
-def empty_answer_callback_query(call: types.CallbackQuery):
+def send_detection_img(img: Union[Image.Image, np.ndarray], *, person_detected_name: str='Unknown', access_camera_name: str='Unknown camera'):
     """
-    Just a workaround to avoid the pressed button to be highlighted for a long time
+    When a violation is detected we must notify all registered users
     """
-    bot.answer_callback_query(call.id, "")
+    with DB() as db:
+        users = db.get_users()
+
+    buf = BytesIO()
+    if isinstance(img, Image.Image):
+        img.save(buf, format='JPEG')
+    else:
+        if img.dtype != np.uint8:
+            img = img.astype(np.uint8)
+        pil_img = Image.fromarray(img)
+        pil_img.save(buf, format='JPEG')
+
+    caption = f'Violation detected, "{person_detected_name}" has accessed to {access_camera_name}'
+    buf.seek(0)
+    for user_id in users:
+        bot.send_photo(chat_id=user_id, photo=buf, caption=caption)
+        buf.seek(0)
+
+    global logger
+    logger.info("All users notified of the violation by %s in camera %s", person_detected_name, access_camera_name)
 
 
 @bot.message_handler(commands=['start'])
@@ -162,25 +194,14 @@ def list_people(message):
 
 
 # ------------------- CALLBACKS QUERIES -------------------
-def filter_callback_query(call: types.CallbackQuery, query_type: str) -> bool:
-    data = CommandName.decompose(call.data)
-    if query_type == data[0]:
-        del data[0]
-        call.data = data
-        return True
-    return False
 
-
-def override_call_message_id_with_from_user_id(call: types.CallbackQuery):
-    call.message.from_user.id = call.from_user.id
-    return call
 
 
 @bot.callback_query_handler(func=lambda call: filter_callback_query(call, CommandName.BACK_TO_LIST_PEOPLE))
 @require_auth(db=DB, bot=bot)
 def back_to_list_people(call: types.CallbackQuery):
     call = override_call_message_id_with_from_user_id(call)
-    empty_answer_callback_query(call)
+    empty_answer_callback_query(call, bot)
     bot.delete_message(message_id=call.message.id, chat_id=call.message.chat.id)
     list_people(call.message)
 
@@ -444,6 +465,12 @@ def echo_all(message):
         os.path.join('.', 'datasets', pics[randint(1, 4)] + '.jpg')
     ))
 
+def start_bot(logger_level):
+    bot.polling(logger_level=logger_level, skip_pending=True)
+
+def stop_bot():
+    import signal
+    os.kill(os.getpid(), signal.SIGKILL)
 
 if __name__ == '__main__':
     with DB() as db:
@@ -452,4 +479,19 @@ if __name__ == '__main__':
         db.add_camera(3, 'camera3')
         db.add_camera(4, 'camera4')
 
-bot.infinity_polling(logger_level=DEBUG)
+    from threading import Thread
+    t = Thread(target=start_bot, args=(DEBUG,), daemon=False)
+    t.start()
+
+    from time import sleep
+    sleep(5)
+
+    pil_test = Image.new('RGB', (200, 200), color='red')
+    send_detection_img(pil_test)
+
+    random_img = np.random.randint(0, 255, (300, 400, 3), dtype=np.uint8)
+    send_detection_img(random_img)
+    print('hello')
+    import sys
+    stop_bot()
+    sys.exit(0)
