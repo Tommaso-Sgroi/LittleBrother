@@ -60,21 +60,23 @@ class CommandName:
         return markup
 
 
-def add_back_button(query_type: str, markup: types.InlineKeyboardMarkup, *data):
-    data = CommandName.join_data(query_type, *data)
-    markup.add(types.InlineKeyboardButton('Back', callback_data=data))
+def add_back_button(back_to_query_type: str, markup: types.InlineKeyboardMarkup, *data):
+    data = CommandName.join_data(back_to_query_type, *data)
+    markup.add(types.InlineKeyboardButton(u'\U00002B05 Back', callback_data=data))
     return markup
 
 
-def add_abort_button(markup: types.InlineKeyboardMarkup):
+def add_abort_button(markup: types.InlineKeyboardMarkup, button_text='Abort'):
     data = CommandName.join_data(CommandName.ABORT)
-    markup.add(types.InlineKeyboardButton('Back', callback_data=data))
+    markup.add(types.InlineKeyboardButton(u'\u26A0 ' + button_text, callback_data=data))
     return markup
 
 
 @bot.callback_query_handler(func=lambda call: filter_callback_query(call, CommandName.ABORT))
 def abort_callback_query(call: types.CallbackQuery):
-    bot.answer_callback_query(call.id, "")
+    bot.clear_step_handler_by_chat_id(call.message.chat.id)
+    bot.clear_reply_handlers_by_message_id(call.message.chat.id)
+    bot.answer_callback_query(call.id)
     bot.delete_message(message_id=call.message.id, chat_id=call.message.chat.id)
     return
 
@@ -89,11 +91,13 @@ def empty_answer_callback_query(call: types.CallbackQuery):
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     print('start')
+    bot.delete_message(message.chat.id, message.id)
     bot.send_message(message.chat.id, "Howdy, how are you doing?")
 
 
 @bot.message_handler(commands=['help'])
 def send_help(message):
+    bot.delete_message(message.chat.id, message.id)
     bot.send_message(message.chat.id, "This bot is a telegram bot to get notifications from the camera system\n" + \
                      "You can use the following commands:\n" + \
                      "\t/start - Start the bot\n" + \
@@ -110,6 +114,7 @@ def send_help(message):
 
 @bot.message_handler(commands=['auth'])
 def auth_user(message):
+    bot.delete_message(message.chat.id, message.id)
     def authenticate_user(msg):
         logger.debug('authenticating user')
         if msg.text == auth_token:
@@ -129,10 +134,18 @@ def auth_user(message):
     bot.send_message(message.from_user.id, "send the authentication token chosen by you or provided by the system")
     bot.register_next_step_handler(message, authenticate_user)
 
+@bot.message_handler(commands=["logout"])
+@require_auth(db=DB, bot=bot)
+def logout(message):
+    bot.delete_message(message.chat.id, message.id)
+    with DB() as db:
+        db.delete_user(message.from_user.id)
+        bot.send_message(message.chat.id, "Logged out")
 
 @bot.message_handler(commands=[CommandName.LIST_PEOPLE])
 @require_auth(bot=bot, db=DB)
 def list_people(message):
+    bot.delete_message(message.chat.id, message.id)
     query_type = CommandName.LIST_PEOPLE
 
     with DB() as db:
@@ -144,7 +157,7 @@ def list_people(message):
     markup = telebot.util.quick_markup({
         p_name: {'callback_data': CommandName.join_data(query_type, p_name)} for p_name in people
     }, row_width=1)
-    markup = add_abort_button(markup)
+    markup = add_abort_button(markup, 'exit')
     bot.send_message(message.chat.id, 'People enrolled into the system', reply_markup=markup)
 
 
@@ -167,6 +180,7 @@ def override_call_message_id_with_from_user_id(call: types.CallbackQuery):
 def back_to_list_people(call: types.CallbackQuery):
     call = override_call_message_id_with_from_user_id(call)
     empty_answer_callback_query(call)
+    bot.delete_message(message_id=call.message.id, chat_id=call.message.chat.id)
     list_people(call.message)
 
 
@@ -189,7 +203,8 @@ def select_person(call: types.CallbackQuery):  # <- passes a CallbackQuery type 
         # i hate python :(
         for user_name, camera_id, camera_name, listed in access_list
     }, row_width=2)
-    markup = add_abort_button(markup)
+    markup = add_back_button(CommandName.BACK_TO_LIST_PEOPLE, markup)
+    bot.delete_message(call.message.chat.id, call.message.id)
     bot.send_message(call.message.chat.id, f'{username} accesses', reply_markup=markup)
 
 
@@ -204,7 +219,7 @@ def select_person(call: types.CallbackQuery):  # <- passes a CallbackQuery type 
         db.update_person_access_list(username, int(camera_id), listed)
         access_list = db.get_person_rooms_access_list(username)
     bot.answer_callback_query(call.id, "")
-
+    bot.delete_message(call.message.chat.id, call.message.id)
     query_type = CommandName.CHANGE_ACCESS
 
     markup = telebot.util.quick_markup({
@@ -223,6 +238,7 @@ def select_person(call: types.CallbackQuery):  # <- passes a CallbackQuery type 
 @bot.message_handler(commands=['remove'])
 @require_auth(bot=bot, db=DB)
 def remove_person_list(message):
+    bot.delete_message(message.chat.id, message.id)
     query_type = CommandName.REMOVE_PERSON_ENROLLMENT
     with DB() as db:
         people = db.get_people_access_names()
@@ -266,6 +282,7 @@ def remove_person(call: types.CallbackQuery):
 @bot.message_handler(commands=['enroll'])
 @require_auth(bot=bot, db=DB)
 def enroll_person(message):
+    bot.delete_message(message.chat.id, message.id)
     bot.send_message(message.chat.id, 'Type the name of the person you want to enroll')
     bot.register_next_step_handler(message, enroll_user)
 
