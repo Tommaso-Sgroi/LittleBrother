@@ -3,6 +3,8 @@
 import sqlite3
 from os.path import curdir
 
+from psutil import users
+
 import local_utils.logger as l
 
 class TBDatabase(l.Logger):
@@ -132,6 +134,17 @@ class TDBAtomicConnection(l.Logger):
             self.logger.error("Error during user selection: %s", e)
         finally:
             cursor.close()
+
+    def get_users(self):
+        cursor = self.get_cursor()
+        try:
+            cursor.execute("SELECT user_id FROM Users")
+            return cursor.fetchall()
+        except Exception as e:
+            self.logger.error("Error during user selection: %s", e)
+        finally:
+            cursor.close()
+
 
     def user_is_authed(self, user_id: int) -> bool:
         return self.user_exist(user_id)
