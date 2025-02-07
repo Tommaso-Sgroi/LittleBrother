@@ -177,6 +177,7 @@ def override_call_message_id_with_from_user_id(call: types.CallbackQuery):
 
 
 @bot.callback_query_handler(func=lambda call: filter_callback_query(call, CommandName.BACK_TO_LIST_PEOPLE))
+@require_auth(db=DB, bot=bot)
 def back_to_list_people(call: types.CallbackQuery):
     call = override_call_message_id_with_from_user_id(call)
     empty_answer_callback_query(call)
@@ -185,6 +186,7 @@ def back_to_list_people(call: types.CallbackQuery):
 
 
 @bot.callback_query_handler(func=lambda call: filter_callback_query(call, CommandName.LIST_PEOPLE))
+@require_auth(db=DB, bot=bot)
 def select_person(call: types.CallbackQuery):  # <- passes a CallbackQuery type object to your function
     """Show person information, about his access to the rooms"""
     bot.answer_callback_query(call.id, "Selected {}".format(*call.data))
@@ -209,6 +211,7 @@ def select_person(call: types.CallbackQuery):  # <- passes a CallbackQuery type 
 
 
 @bot.callback_query_handler(func=lambda call: filter_callback_query(call, CommandName.CHANGE_ACCESS))
+@require_auth(db=DB, bot=bot)
 def select_person(call: types.CallbackQuery):  # <- passes a CallbackQuery type object to your function
     """Show person information, about his access to the rooms"""
     assert len(call.data) == 3
@@ -254,6 +257,7 @@ def remove_person_list(message):
 
 
 @bot.callback_query_handler(func=lambda call: filter_callback_query(call, CommandName.REMOVE_PERSON_ENROLLMENT))
+@require_auth(db=DB, bot=bot)
 def remove_person(call: types.CallbackQuery):
     query_type = CommandName.REMOVE_PERSON_ENROLLMENT
     assert len(call.data) == 1
