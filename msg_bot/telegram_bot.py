@@ -29,7 +29,7 @@ logger = get_logger(__name__)
 auth_token = os.getenv("AUTH_TOKEN")
 basedir_enroll_path = './registered_faces'  # TODO change to an actual option
 
-BLACK_LISTED, WHITE_LISTED = u"\U0001F6AB", u"\U00002705"
+BLACK_LISTED, WHITE_LISTED, PERSON_UNICODE = u"\U0001F6AB", u"\U00002705", u'\U0001F464'
 
 
 # constants, message query types
@@ -90,6 +90,7 @@ def abort_callback_query(call: types.CallbackQuery):
     bot.clear_step_handler_by_chat_id(call.message.chat.id)
     bot.clear_reply_handlers_by_message_id(call.message.chat.id)
     bot.answer_callback_query(call.id)
+    bot.send_message(call.message.chat.id, "Operation aborted")
     bot.delete_message(message_id=call.message.id, chat_id=call.message.chat.id)
     return
 
@@ -122,14 +123,11 @@ def send_detection_img(img: Union[Image.Image, np.ndarray], *, person_detected_n
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    print('start')
-    bot.delete_message(message.chat.id, message.id)
     bot.send_message(message.chat.id, "Howdy, how are you doing?")
 
 
 @bot.message_handler(commands=['help'])
 def send_help(message):
-    bot.delete_message(message.chat.id, message.id)
     bot.send_message(message.chat.id, "This bot is a telegram bot to get notifications from the camera system\n" + \
                      "You can use the following commands:\n" + \
                      "\t/start - Start the bot\n" + \
@@ -146,9 +144,9 @@ def send_help(message):
 
 @bot.message_handler(commands=['auth'])
 def auth_user(message):
-    bot.delete_message(message.chat.id, message.id)
     def authenticate_user(msg):
         logger.debug('authenticating user')
+        bot.delete_message(message_id=msg.id, chat_id=msg.chat.id)
         if msg.text == auth_token:
             user_id = msg.from_user.id
             # user_name = message.from_user.username
@@ -169,17 +167,14 @@ def auth_user(message):
 @bot.message_handler(commands=["logout"])
 @require_auth(db=DB, bot=bot)
 def logout(message):
-    bot.delete_message(message.chat.id, message.id)
     with DB() as db:
         db.delete_user(message.from_user.id)
         bot.send_message(message.chat.id, "Logged out")
 
-@bot.message_handler(commands=[CommandName.LIST_PEOPLE])
+@bot.message_handler(commands=['list'])
 @require_auth(bot=bot, db=DB)
 def list_people(message):
-    bot.delete_message(message.chat.id, message.id)
     query_type = CommandName.LIST_PEOPLE
-
     with DB() as db:
         people = db.get_people_access_names()
     if len(people) == 0:
@@ -187,7 +182,7 @@ def list_people(message):
         return
     # convert the list of people to {text: kwargs} {str:}
     markup = telebot.util.quick_markup({
-        p_name: {'callback_data': CommandName.join_data(query_type, p_name)} for p_name in people
+        PERSON_UNICODE + ' ' + p_name: {'callback_data': CommandName.join_data(query_type, p_name)} for p_name in people
     }, row_width=1)
     markup = add_abort_button(markup, 'exit')
     bot.send_message(message.chat.id, 'People enrolled into the system', reply_markup=markup)
@@ -262,7 +257,7 @@ def select_person(call: types.CallbackQuery):  # <- passes a CallbackQuery type 
 @bot.message_handler(commands=['remove'])
 @require_auth(bot=bot, db=DB)
 def remove_person_list(message):
-    bot.delete_message(message.chat.id, message.id)
+    # bot.delete_message(message.chat.id, message.id)
     query_type = CommandName.REMOVE_PERSON_ENROLLMENT
     with DB() as db:
         people = db.get_people_access_names()
@@ -271,7 +266,7 @@ def remove_person_list(message):
         return
     # convert the list of people to {text: kwargs} {str:}
     markup = telebot.util.quick_markup({
-        p_name: {'callback_data': CommandName.join_data(query_type, p_name)} for p_name in people
+        PERSON_UNICODE + ' ' + p_name: {'callback_data': CommandName.join_data(query_type, p_name)} for p_name in people
     }, row_width=1)
     markup = add_abort_button(markup)
     bot.send_message(message.chat.id, 'Select the people to remove from the system', reply_markup=markup)
@@ -280,6 +275,7 @@ def remove_person_list(message):
 @bot.callback_query_handler(func=lambda call: filter_callback_query(call, CommandName.REMOVE_PERSON_ENROLLMENT))
 @require_auth(db=DB, bot=bot)
 def remove_person(call: types.CallbackQuery):
+    bot.delete_message(call.message.chat.id, call.message.id)
     query_type = CommandName.REMOVE_PERSON_ENROLLMENT
     assert len(call.data) == 1
     username = call.data[0]
@@ -291,7 +287,7 @@ def remove_person(call: types.CallbackQuery):
             for enroll in enrolls:
                 enroll_stem = Path(enroll).stem
                 if username == enroll_stem:
-                    # os.remove(os.path.join(basedir_enroll_path, enroll))
+                    os.remove(os.path.join(basedir_enroll_path, enroll))
                     break
     except Exception as e:
         bot.answer_callback_query(call.id, f'Error: {str(e)}')
@@ -307,7 +303,7 @@ def remove_person(call: types.CallbackQuery):
 @bot.message_handler(commands=['enroll'])
 @require_auth(bot=bot, db=DB)
 def enroll_person(message):
-    bot.delete_message(message.chat.id, message.id)
+    # bot.delete_message(message.chat.id, message.id)
     bot.send_message(message.chat.id, 'Type the name of the person you want to enroll')
     bot.register_next_step_handler(message, enroll_user)
 
@@ -349,7 +345,7 @@ def enroll_user(message, override_enrollment=False, enroll_person_name=''):
 
 
 # def enroll_photo_from_user(message, enroll_name:str, scope:str, camera_id:int, retries=3):
-def enroll_photo_from_user(message, enroll_name: str, override=False, retries=3):
+def enroll_photo_from_user(message, enroll_name: str, override=False, retries=2):
     fr = FaceRecognizer()
     # it's ok to instantiate everytime the face recognizer, since we are calling it few times in
     # the scenario, and purpose, of this bot
@@ -478,20 +474,23 @@ if __name__ == '__main__':
         db.add_camera(2, 'camera2')
         db.add_camera(3, 'camera3')
         db.add_camera(4, 'camera4')
+    start_bot(DEBUG)
 
-    from threading import Thread
-    t = Thread(target=start_bot, args=(DEBUG,), daemon=False)
-    t.start()
 
-    from time import sleep
-    sleep(5)
-
-    pil_test = Image.new('RGB', (200, 200), color='red')
-    send_detection_img(pil_test)
-
-    random_img = np.random.randint(0, 255, (300, 400, 3), dtype=np.uint8)
-    send_detection_img(random_img)
-    print('hello')
-    import sys
-    stop_bot()
-    sys.exit(0)
+    # from threading import Thread
+    # t = Thread(target=start_bot, args=(DEBUG,), daemon=False)
+    # t.start()
+    #
+    # from time import sleep
+    # sleep(5)
+    # print('hi')
+    #
+    # pil_test = Image.new('RGB', (200, 200), color='red')
+    # send_detection_img(pil_test)
+    #
+    # random_img = np.random.randint(0, 255, (300, 400, 3), dtype=np.uint8)
+    # send_detection_img(random_img)
+    # print('hello')
+    # import sys
+    # stop_bot()
+    # sys.exit(0)
