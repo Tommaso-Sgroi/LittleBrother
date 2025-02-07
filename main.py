@@ -1,5 +1,7 @@
+import multiprocessing
 import time
 from concurrent.futures import ProcessPoolExecutor
+from threading import Thread
 
 import cv2
 import torch
@@ -7,7 +9,9 @@ from ultralytics import YOLO
 
 from motion_detector.motion_detector import MotionDetector
 from face_recognizer.face_recognizer import FaceRecognizer
+from local_utils.logger import get_logger
 
+logger = get_logger(__name__)
 
 def rescale_frame(frame, percent=50):
     width = int(frame.shape[1] * percent / 100)
@@ -19,8 +23,7 @@ def rescale_frame(frame, percent=50):
 def process_video_frames(video_path):
     # Each process gets its own model and face recognizer
     device = (
-        "cuda"
-        if torch.cuda.is_available()
+        "cuda" if torch.cuda.is_available()
         else ("mps" if torch.backends.mps.is_available() else "cpu")
     )
 
@@ -99,13 +102,46 @@ def process_video_frames(video_path):
     print(f"[{video_path}] Total time: {total_time:.2f}s\n")
 
 
+
+def start_video_processing(sources: list[multiprocessing.Process], queue:multiprocessing.Queue):
+    processes = []
+
+    for vp in sources:
+        p = multiprocessing.Process(target=process_video_frames, args=(vp,), )
+        processes.append(p)
+        p.start()
+    return processes
+
+def terminate_video_processing(processes):
+    logger.info("[main] Terminating children...")
+    for p in processes:
+        p.terminate()
+
+    for p in processes:
+        p.join(timeout=1)
+        if p.is_alive():
+            logger.critical("[main] Forcing kill on", p.pid)
+            p.kill()
+
+
+
+
 if __name__ == "__main__":
     video_paths = [
         "./datasets/new_video.mp4",
         # "./datasets/video1_1.mp4",
         # "./datasets/video1_5.mp4",
-        1,  # MacBook webcam :)
+        0,  # MacBook webcam :)
     ]
 
-    with ProcessPoolExecutor(max_workers=len(video_paths)) as executor:
-        executor.map(process_video_frames, video_paths)
+    start_video_processing(video_paths)
+
+
+
+
+
+
+
+
+
+

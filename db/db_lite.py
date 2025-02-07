@@ -7,6 +7,9 @@ from psutil import users
 
 import local_utils.logger as l
 
+def get_database(db_path, *, dropdb = False):
+    return TBDatabase(db_path, dropdb)
+
 class TBDatabase(l.Logger):
     """
     Classe per la gestione di un database SQLite3 per il bot Telegram.

@@ -12,7 +12,7 @@ from random import randint
 
 from local_utils.logger import get_logger
 from msg_bot.utils import require_auth, empty_answer_callback_query, override_call_message_id_with_from_user_id
-from db.db_lite import TBDatabase
+from db.db_lite import TBDatabase, get_database
 from face_recognizer.face_recognizer import FaceRecognizer
 from io import BytesIO
 from PIL import Image
@@ -22,7 +22,7 @@ This code is a bit rushed and must, i repeat MUST, be refactored to be at least 
 '''
 
 bot = telebot.TeleBot(os.getenv("TELEGRAM_BOT_TOKEN"))
-DB = TBDatabase('database.db', drop_db=False)
+DB: TBDatabase = None
 
 logger = get_logger(__name__)
 
@@ -469,6 +469,7 @@ def stop_bot():
     os.kill(os.getpid(), signal.SIGKILL)
 
 if __name__ == '__main__':
+    DB = get_database('database.db', dropdb=False)
     with DB() as db:
         db.add_camera(1, 'camera1')
         db.add_camera(2, 'camera2')
