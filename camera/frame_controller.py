@@ -5,7 +5,7 @@ from threading import Thread, Lock
 from numpy import ndarray
 
 from local_utils.logger import Logger
-from .frame_source import FrameSource
+from .frame_source import QueuedFrameSource
 
 
 class VideoFrameController(Thread, Logger):
@@ -57,7 +57,7 @@ class VideoFrameController(Thread, Logger):
                     self._buffer = []
                 return buffer
 
-    def __init__(self, sources: list[FrameSource], fifo_queue: Queue):
+    def __init__(self, sources: list[QueuedFrameSource], fifo_queue: Queue):
         Logger.__init__(self, name=f"{self.__class__.__name__}")
         Thread.__init__(self)
 

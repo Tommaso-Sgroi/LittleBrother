@@ -22,7 +22,7 @@ This code is a bit rushed and must, i repeat MUST, be refactored to be at least 
 '''
 
 bot = telebot.TeleBot(os.getenv("TELEGRAM_BOT_TOKEN"))
-DB: TBDatabase = None
+DB: TBDatabase = get_database(os.getenv('DB_PATH'), dropdb=False)
 
 logger = get_logger(__name__)
 

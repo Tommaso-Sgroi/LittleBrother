@@ -1,10 +1,14 @@
 import os.path
 from multiprocessing import Queue
+from typing import Union
+
+from .camera_source import CameraSource
 from .frame_controller import VideoFrameController
+from .frame_source import FrameSource
 from .video_source import VideoSource
 
 
-def initializer(video_paths: list, *, max_queue_size=None, timeout=0.1, fps=15) -> VideoFrameController:
+def initializer(video_paths: list[Union[str,int]], *, max_queue_size=None, timeout=0.1, fps=15) -> VideoFrameController:
     """
     Creates and configures a video frame controller along with its associated video sources.
 
@@ -34,12 +38,17 @@ def initializer(video_paths: list, *, max_queue_size=None, timeout=0.1, fps=15) 
         max_queue_size = len(video_paths) * fps + 1
 
     fifo_queue = Queue(maxsize=max_queue_size)
-
     for video_path in video_paths:
-        video_id = os.path.basename(video_path)
-        video_frame_source = VideoSource(video_id, video_path, fifo_queue=fifo_queue, timeout=timeout, fps=fps)
+        if type(video_path) is int:
+            camera_id = f"camera{video_path}"
+            source = CameraSource(camera_id, video_path, fifo_queue=fifo_queue, timeout=timeout, fps=fps)
+        elif type(video_path) is str:
+            video_id = os.path.basename(video_path)
+            source = VideoSource(video_id, video_path, fifo_queue=fifo_queue, timeout=timeout, fps=fps)
+        else:
+            raise ValueError(f"Invalid video path: {video_path}")
 
-        video_sources.append(video_frame_source)
+        video_sources.append(source)
 
     frame_controller = VideoFrameController(video_sources, fifo_queue=fifo_queue)
     return frame_controller

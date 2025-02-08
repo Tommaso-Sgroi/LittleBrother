@@ -148,5 +148,17 @@ def echo_all(message):
     bot.send_message(userid, 'CIAO!')
     bot.send_photo(userid, telebot.types.InputFile(os.path.join('..', 'datasets', 'spidgame.jpg' if randint(0, 1) else 'goku.jpg')))
 
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton
+
+# Create a custom keyboard markup
+contact_sup_markup = ReplyKeyboardMarkup(resize_keyboard=True)
+contact_sup_button = KeyboardButton('Contact Support')
+contact_sup_markup.row(contact_sup_button)
+
+# Create a custom keyboard markup for the "Go Back" button
+go_back_markup = ReplyKeyboardMarkup(resize_keyboard=True)
+go_back_button = KeyboardButton('Go Back')
+go_back_markup.row(go_back_button)
+
 
 bot.infinity_polling(logger_level=DEBUG)
