@@ -92,13 +92,14 @@ class VideoProcessor(QueuedFrameSource):
 
                 detected_person_image = frame[y1:y2, x1:x2]
                 faces = self.face_recognizer.recognize_faces(detected_person_image)
-
                 for detected_face in faces:
                     if detected_face["label"] is not None:
                         detections.append((detected_face["label"], frames[index]))
                         self.logger.debug(
                             f"[{self.id}] Detected face: {detected_face['label']} with confidence {detected_face['confidence']}"
                         )
+                    else:
+                        detections.append((None, frames[index]))
         index += 1
 
 
