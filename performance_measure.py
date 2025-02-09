@@ -46,7 +46,7 @@ def mog2_motion_detector(bg_subtractor, frame, min_area=500):
     return False
 
 
-def process_video_frames(video_path, motion_detector=None):
+def process_video_frames(video_path, motion_detector=None, crop=True):
     # Each process gets its own model and face recognizer
     device = (
         "cuda"
@@ -97,7 +97,10 @@ def process_video_frames(video_path, motion_detector=None):
                     x1, y1, x2, y2 = box
                     if x2 - x1 < 20 or y2 - y1 < 20:
                         continue
-                    detected_person_image = frame[y1:y2, x1:x2]
+                    if crop:
+                        detected_person_image = frame[y1:y2, x1:x2]
+                    else:
+                        detected_person_image = frame
                     faces = face_recognizer.recognize_faces(detected_person_image)
                     for detected_face in faces:
                         if detected_face["label"] is not None:
@@ -115,7 +118,10 @@ def process_video_frames(video_path, motion_detector=None):
                 x1, y1, x2, y2 = box
                 if x2 - x1 < 20 or y2 - y1 < 20:
                     continue
-                detected_person_image = frame[y1:y2, x1:x2]
+                if crop:
+                    detected_person_image = frame[y1:y2, x1:x2]
+                else:
+                    detected_person_image = frame
                 faces = face_recognizer.recognize_faces(detected_person_image)
                 for detected_face in faces:
                     if detected_face["label"] is not None:
@@ -149,17 +155,12 @@ def process_video_wrapper(args):
     return process_video_frames(video_path, detector)
 
 
-if __name__ == "__main__":
+def process_video_wrapper_with_crop(args):
+    video_path, detector, crop_val = args
+    return process_video_frames(video_path, motion_detector=detector, crop=crop_val)
 
-    video_paths = [
-        "./datasets/SamsungGear360.mp4",
-        # "./datasets/new_video.mp4",
-        # "./datasets/video1_1.mp4",
-        # "./datasets/video1_3.mp4",
-        # "./datasets/video1_5.mp4",
-        # 1,  # MacBook webcam :)
-    ]
 
+def test_motion_detectors(video_paths):
     global_bg_subtractor = cv2.createBackgroundSubtractorMOG2(history=10)
 
     motion_detector_options = {
@@ -180,3 +181,32 @@ if __name__ == "__main__":
     print("\nMotion Detection Average FPS Comparison:")
     for key, fps in results.items():
         print(f"  {key}: {fps} FPS")
+
+
+def test_crop_option(video_paths):
+    print("\nTesting MOG2 motion detector: Crop vs No Crop")
+    mog2_detector = mog2_detector_fn
+    scenarios = {"Crop Enabled": True, "No Crop": False}
+    results = {}
+    for label, crop_val in scenarios.items():
+        print(f"\nRunning test with {label}...")
+        tasks = [(video, mog2_detector, crop_val) for video in video_paths]
+        with ProcessPoolExecutor(max_workers=len(video_paths)) as executor:
+            fps_values = list(executor.map(process_video_wrapper_with_crop, tasks))
+        avg_fps = sum(fps_values) / len(fps_values) if fps_values else 0
+        results[label] = avg_fps
+
+    print("\nMOG2 Motion Detector FPS Comparison:")
+    for label, fps in results.items():
+        print(f"  {label}: {fps:.2f} FPS")
+
+
+if __name__ == "__main__":
+    video_paths = [
+        "./datasets/SamsungGear360.mp4",
+        # "./datasets/new_video.mp4",
+        # "./datasets/video1_1.mp4",
+        # "./datasets/video1_3.mp4",
+        # "./datasets/video1_5.mp4",
+        # 1,  # MacBook webcam :)
+    ]
