@@ -1,7 +1,8 @@
 from multiprocessing import Process, Queue
+from threading import Thread
 from typing import Union
 
-from local_utils.config import Config
+from local_utils.config import Config, config
 from local_utils.logger import Logger
 from PIL import Image
 
@@ -14,33 +15,30 @@ class TelegramBotProcess(Process, Logger):
         self.img_queue = img_queue
         self.bot = None
 
-    def get_images_labels(self) -> list[tuple[str, Union[int, str], Image]]:
-        """returns a list of: the frame source id (See VideoSource), detected face's label/name and the frame PIL image"""
-        return [
-            frame.pop()  # de-encapsulate the frames -> (camera_name, person_name, frame)
-            for frame in self.img_queue.get()
-        ]
 
     def stop(self):
         self.bot.stop_bot()
         self.terminate()
-
+    
     def run(self):
         import msg_bot.telegram_bot as t_bot
-        t_bot.start_bot(None) # todo change me
+
+        Thread(target=run_img_sender, args=(self.logger, self.img_queue, t_bot.send_detection_img), daemon=True).start()
+
+        t_bot.start_bot(config.logger_config['level'])
         self.bot = t_bot.bot
 
-        while True:
-            try:
-                img = self.get_images_labels()
-                for camera_name, label, img in img:
-                    t_bot.send_detection_img(img, person_detected_name=label, access_camera_name=camera_name)
-            except Exception as e:
-                self.logger.fatal(f'error in telegram bot: {e}')
-                break
-        self.logger.info('exiting')
-        self.stop()
         return 0
 
 
+def run_img_sender(logger, queue: Queue, send_detection_img):
 
+    while True:
+        try:
+            img = queue.get()
+            for camera_name, label, img in img:
+                send_detection_img(img, person_detected_name=label, access_camera_name=camera_name)
+        except Exception as e:
+            logger.fatal(f'error in telegram bot: {e}')
+            break
+    logger.info('exiting')

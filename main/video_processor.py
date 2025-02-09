@@ -4,7 +4,6 @@ from typing import Union
 
 import torch
 from ultralytics import YOLO
-
 from camera.frame_controller import VideoFrameController
 from camera.frame_source import QueuedFrameSource, FrameSource
 from camera.video_frame_initializer import QueuedFrameControllerFactory
@@ -60,9 +59,9 @@ class VideoProcessor(QueuedFrameSource):
         # put the frames in the queue
         detection = self.process_video_frames(frames)
         # detection: list[Union[int, str], list[str, tuple[str, str]]]
-        if len(detection) > 1:
+        if len(detection) > 0:
             detection.insert(0, self.id)
-            self.queue.put(detection, timeout=self.timeout)
+            self.queue.put([detection], timeout=self.timeout)
 
     def process_video_frames(self, frames) -> list[Union[str, tuple[str, str]]]:
         # Each process gets its own model and face recognizer
@@ -73,7 +72,7 @@ class VideoProcessor(QueuedFrameSource):
         batch_frames = [rescale_frame(frame, self.scale_size) for frame in frames] # Resize the frame to 50% of its original size
         frame_count += 1
 
-        detections = [self.id]
+        detections = []
         # When the batch is full or end-of-video is reached, process the batch.
         results = self.yolo_model(
             batch_frames, classes=[0], device=self.device, verbose=False
@@ -101,7 +100,7 @@ class VideoProcessor(QueuedFrameSource):
                         )
                     else:
                         detections.append((None, frames[index]))
-        index += 1
+            index += 1
 
 
         total_time = time.time() - start_time
@@ -115,12 +114,6 @@ class VideoProcessor(QueuedFrameSource):
     def view_frames(self, batch_frames, winname):
         for frame in batch_frames:
             view(frame, winname=winname)
-
-class VideoProcessorController(VideoFrameController):
-
-    pass
-
-
 
 
 class VideoProcessorFrameControllerFactory(QueuedFrameControllerFactory):

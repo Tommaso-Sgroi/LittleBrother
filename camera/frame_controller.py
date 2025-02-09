@@ -118,10 +118,8 @@ class VideoFrameController(Thread, Logger):
             source.start()
 
     def stop_sources(self):
-        self.logger.info(f'stopping frame sources')
         for source in self.sources: source.terminate()
         for source in self.sources: source.join()
-        self.logger.info(f'stopped all frame sources')
 
     def stop(self):
         self.stop_sources()

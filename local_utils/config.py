@@ -3,7 +3,7 @@ import os.path
 import yaml
 from pathlib import Path
 from typing import Any, Dict
-
+from logging import INFO, DEBUG, WARNING, ERROR, CRITICAL
 class ConfigException(Exception):
     pass
 
@@ -64,6 +64,20 @@ class Config:
             "to_file": logger_cfg.get("to_file", False),
             "file_path": logger_cfg.get("file_path", "log.log"),
         }
+
+        level = self.logger_config["level"]
+        if level not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
+            raise ConfigException(f"Invalid log level: {level}")
+        elif level == "DEBUG":
+            self.logger_config["level"] = DEBUG
+        elif level == "INFO":
+            self.logger_config["level"] = INFO
+        elif level == "WARNING":
+            self.logger_config["level"] = WARNING
+        elif level == "ERROR":
+            self.logger_config["level"] = ERROR
+        elif level == "CRITICAL":
+            self.logger_config["level"] = CRITICAL
 
 
 
