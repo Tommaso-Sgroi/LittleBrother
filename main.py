@@ -1,6 +1,4 @@
-import os
 import sys
-import threading
 from threading import Thread
 from time import sleep
 
@@ -19,7 +17,7 @@ import msg_bot.telegram_bot as t_bot
 
 
 def init_database(config: Config):
-    db = TBDatabase(config.db_path, drop_db=config.drop_db)  # todo change me
+    db = TBDatabase(config.db_path, drop_db=config.drop_db)
     return db
 
 
@@ -77,7 +75,6 @@ if __name__ == "__main__":
 
     init_logger(config)
 
-
     database = init_database(config)
     frame_controller = init_frame_controller(config)
 
@@ -88,7 +85,7 @@ if __name__ == "__main__":
     main_thread = Thread(target=main, args=(database, frame_controller), daemon=False)
 
     telegram_bot.start()
-    # sleep(1)
+    sleep(1)
     main_thread.start()
 
     handle_signal(frame_controller)
