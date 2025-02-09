@@ -6,14 +6,18 @@ from multiprocessing import Process, Queue
 import cv2 as cv
 
 class FrameSource(ABC, Process, Logger):
+    """
+    Abstract class for a frame source.
+    The stream must implement the "read" and "isOpened" method
+    """
 
-    def __init__(self, id, *, stream: cv.VideoCapture, **kwargs):
+    def __init__(self, id, **kwargs):
         Process.__init__(self, **kwargs)
         Logger.__init__(self, name=f"{self.__class__.__name__}-{id}")
 
         self.id = id
-        self.stream = stream
         self.buffer = []
+        self.stream = None
 
 
     @abstractmethod
@@ -37,16 +41,17 @@ class FrameSource(ABC, Process, Logger):
         pass
 
 class QueuedFrameSource(FrameSource, ABC):
-    def __init__(self, id, fifo_queue: Queue, timeout:float, fps:int, *, stream, **kwargs):
-        FrameSource.__init__(self, id, stream=stream, **kwargs)
+    def __init__(self, id, source_name, fifo_queue: Queue, timeout:float, fps:int, **kwargs):
+        FrameSource.__init__(self, id, **kwargs)
         self.queue = fifo_queue
         self.timeout = timeout
         self.fps = fps
+        self.source_name = source_name
 
     @rate_limit
     def read(self):
         """
-        Legge un frame dal video. L'accesso è rate-limitato dal decoratore.
+        Calls stream.read(), it is rate limited by the decorator to self.fps.
         """
         return self.stream.read()
 
@@ -54,6 +59,8 @@ class QueuedFrameSource(FrameSource, ABC):
     def queue_video_frame(self, frame):
         self.queue.put([(self.id, frame)], timeout=self.timeout)
 
+    def create_stream(self):
+        self.stream = cv.VideoCapture(self.id)
 
     def next(self):
         ret, frame = self.read()
@@ -65,7 +72,7 @@ class QueuedFrameSource(FrameSource, ABC):
         try:
             self.create_stream()
             if not self.stream.isOpened():
-                self.logger.error(f'cannot open stream {self.id}')
+                self.logger.error(f'[{self.source_name}]cannot open stream {self.id}')
                 return 1
 
             while True:
@@ -73,15 +80,14 @@ class QueuedFrameSource(FrameSource, ABC):
                 try:
                     self.queue_video_frame(frame)
                 except queue.Full:
-                    self.logger.debug(f'cannot send video frame: queue full, skipping frame')
+                    self.logger.debug(f'[{self.source_name}] cannot send video frame: queue full, skipping frame')
                 except Exception as ex:
-                    self.logger.critical(f'cannot send video frame: %s', ex)
+                    self.logger.critical(f'[{self.source_name}] cannot send video frame: %s', ex)
                     return 1
         except StopIteration:
-            self.logger.info(f'no more frames, exiting')
+            self.logger.info(f'[{self.source_name}] no more frames, exiting')
             return 0
         finally:
             self.stream.release()
 
-    def create_stream(self):
-        self.stream = cv.VideoCapture(self.id)
+
