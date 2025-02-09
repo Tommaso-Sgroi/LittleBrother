@@ -1,9 +1,7 @@
 from queue import Empty
 from time import sleep
 
-from camera.video_frame_initializer import QueuedFrameControllerFactory
 from main.video_processor import VideoProcessorFrameControllerFactory
-from people_detector.people_detector import PeopleDetector
 from local_utils.view import view
 from local_utils.logger import init_logger
 import logging
@@ -22,9 +20,9 @@ if __name__ == '__main__':
 
     # controller = QueuedFrameControllerFactory().initializer(videos, timeout=-1, fps=60)
 
-    yolosize = 'n'
-    yolo11 = PeopleDetector(f"yolo11{yolosize}.pt", verbose=False, )
-    yolo11.to('cpu')
+    # yolosize = 'n'
+    # yolo11 = PeopleDetector(f"yolo11{yolosize}.pt", verbose=False, )
+    # yolo11.to('cpu')
 
     controller = (VideoProcessorFrameControllerFactory()
                   .initializer(videos,
@@ -32,7 +30,9 @@ if __name__ == '__main__':
                                 max_queue_size=None,
                                 fps=fps,
                                 timeout = -1,
-                                scale_size=50))
+                                scale_size=100,
+                                view = True
+                               ))
 
     #
     # overlap_threshold = 0.0005
@@ -49,11 +49,11 @@ if __name__ == '__main__':
             video_id = sourceids_frames[i][0]
             frame = sourceids_frames[i][1]
 
-            probs, bboxes, result = yolo11.detect(frame)
-            print('confidence scores', probs)
-            print('bboxes', bboxes)
-            annotated_frame = result.plot()
-            sourceids_frames[i] = (str(video_id), annotated_frame)
+            # # probs, bboxes, result = yolo11.detect(frame)
+            # print('confidence scores', probs)
+            # print('bboxes', bboxes)
+            # annotated_frame = result.plot()
+            # sourceids_frames[i] = (str(video_id), annotated_frame)
 
         iter_and_plot(sourceids_frames)
 
