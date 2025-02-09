@@ -15,25 +15,21 @@ if __name__ == '__main__':
         ../datasets/WiseNET/wisenet_dataset/video_sets/set_1/video1_5.avi""".split('\n')
 
     videos = [video.strip() for video in videos] + [0]
-    videos = [0]
-    fps = 30
+    # videos = [0]
+    fps = 60
 
     # controller = QueuedFrameControllerFactory().initializer(videos, timeout=-1, fps=60)
-
-    # yolosize = 'n'
-    # yolo11 = PeopleDetector(f"yolo11{yolosize}.pt", verbose=False, )
-    # yolo11.to('cpu')
 
     controller = (VideoProcessorFrameControllerFactory()
                   .initializer(videos,
                                 yolo='yolo11n.pt',
                                 max_queue_size=None,
                                 fps=fps,
-                                timeout = -1,
+                                timeout = 0.1,
                                 scale_size=100,
                                 view = True
                                ))
-
+    print('ciao')
     #
     # overlap_threshold = 0.0005
     # area_threshold = 700

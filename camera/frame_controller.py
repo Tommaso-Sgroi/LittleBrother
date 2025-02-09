@@ -114,6 +114,7 @@ class VideoFrameController(Thread, Logger):
 
     def start_frame_sources(self):
         for source in self.sources:
+            self.logger.info(f'starting frame source: {source.id}')
             source.start()
 
     def stop_sources(self):

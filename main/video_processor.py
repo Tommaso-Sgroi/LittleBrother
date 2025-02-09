@@ -78,9 +78,7 @@ class VideoProcessor(QueuedFrameSource):
 
         if self.view:
             annotated_batch_frames = [result.plot() for result in results]
-            str_id = str(self.id)
-            self.view_frames(batch_frames, winname= str_id + ' original')
-            self.view_frames(annotated_batch_frames, winname=str_id + ' yolo')
+            self.view_frames(annotated_batch_frames, winname=str(self.id) + ' yolo')
 
 
         index = 0
