@@ -1,0 +1,16 @@
+Video,Method,FPS
+new_video.mp4,No Motion Detector,23.73
+new_video.mp4,Optical Flow,3.727079812
+new_video.mp4,MOG2,22.27725068
+video1_1.mp4,No Motion Detector,69.78357877
+video1_1.mp4,Optical Flow,35.48163411
+video1_1.mp4,MOG2,211.3745263
+video1_3.mp4,No Motion Detector,63.02472121
+video1_3.mp4,Optical Flow,36.44902288
+video1_3.mp4,MOG2,193.3585037
+video1_5.mp4,No Motion Detector,22.75606641
+video1_5.mp4,Optical Flow,25.90588886
+video1_5.mp4,MOG2,63.66771687
+SamsungGear360.mp4,No Motion Detector,25.74698606
+SamsungGear360.mp4,Optical Flow,3.811454245
+SamsungGear360.mp4,MOG2,23.88354826
