@@ -1,0 +1,53 @@
+
+
+database:
+  path: "database.db"
+  drop_db: false
+
+files:
+  basedir_enroll_path: "./registered_faces"
+
+frame_controller:
+  sources: [0]
+  yolo_model_name: "yolo11n.pt"
+  max_queue_size: null
+  fps: 30
+  timeout: 0.1
+  scale_size: 100
+  view: true
+  device: "cpu"
+  face_recogniser_threshold: 0.5
+
+logger:
+    level: "INFO"
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    datefmt: "%Y-%m-%d %H:%M:%S"
+    to_file: false
+    file_path: "log.log"
+
+
+# example of a configuration file
+#database:
+#  path: "database.db"
+#  drop_db: false
+#
+#files:
+#  basedir_enroll_path: "./registered_faces"
+#
+#frame_controller:
+#  sources: [0, 1, "path_to_video.mp4"]
+#  yolo_model_name: "yolo11n.pt"
+#  max_queue_size: null     # equivalenti a None in Python
+#  fps: 30
+#  timeout: 0.1
+#  scale_size: 100
+#  view: true
+#  device: "cpu"
+#  face_recogniser_threshold: 0.5
+#
+#logger:
+#    level: "INFO"
+#    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+#    datefmt: "%Y-%m-%d %H:%M:%S"
+#    to_file: false
+#    file_path: "log.log"

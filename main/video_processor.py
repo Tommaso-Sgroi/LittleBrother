@@ -1,6 +1,6 @@
 import time
 from multiprocessing import Queue
-from typing import Union, Any
+from typing import Union
 
 import torch
 from ultralytics import YOLO
@@ -57,11 +57,14 @@ class VideoProcessor(QueuedFrameSource):
         return frames
 
     def queue_video_frame(self, frames):
+        # put the frames in the queue
         detection = self.process_video_frames(frames)
+        # detection: list[Union[int, str], list[str, tuple[str, str]]]
         if len(detection) > 1:
+            detection.insert(0, self.id)
             self.queue.put(detection, timeout=self.timeout)
 
-    def process_video_frames(self, frames):
+    def process_video_frames(self, frames) -> list[Union[str, tuple[str, str]]]:
         # Each process gets its own model and face recognizer
 
         start_time = time.time()
@@ -112,6 +115,12 @@ class VideoProcessor(QueuedFrameSource):
     def view_frames(self, batch_frames, winname):
         for frame in batch_frames:
             view(frame, winname=winname)
+
+class VideoProcessorController(VideoFrameController):
+
+    pass
+
+
 
 
 class VideoProcessorFrameControllerFactory(QueuedFrameControllerFactory):
@@ -168,28 +177,46 @@ class VideoProcessorFrameControllerFactory(QueuedFrameControllerFactory):
         return VideoProcessor(source, **kwargs)
 
 
-# def initialize_frame_controller(resources: list[Union[int, str]], *,
-#                                 yolo_model_name: str,
-#                                 fps= 30,
-#                                 max_queue_size=None,
-#                                 device='cpu',
-#                                 timeout=0.1,
-#                                 face_recogniser_threshold= 0.5,
-#                                 batch_size=1,
-#                                 scale_size=0
-#                         ) -> VideoFrameController:
-#
-#     if max_queue_size is None:
-#         max_queue_size = len(resources) * fps + 1
-#
-#     sources = []
-#     fifo_queue = Queue(maxsize=max_queue_size)
-#     for resource in resources:
-#         source = VideoProcessor(resource, device=device, yolo=yolo_model_name, face_recogniser_threshold=face_recogniser_threshold,
-#                                 fifo_queue=fifo_queue, timeout=timeout, fps=fps, batch_size=batch_size, scale_size=scale_size)
-#         sources.append(source)
-#
-#     frame_controller = VideoFrameController(sources, fifo_queue=fifo_queue)
-#     return frame_controller
+def initialize_frame_controller(sources: list[Union[str, int]],
+                                yolo_model_name:str,
+                                max_queue_size:int=None,
+                                fps:int=15,
+                                **kwargs) -> VideoFrameController:
+    """
+    Initializes the camera resources and returns the video frame initializer.
+        Args:
+            sources (Union[str, int]):
+                - If `int`, the camera device index from which to read frames.
+                - If `str`, a path to a video file on the filesystem.
+            max_queue_size: Maximum number of frames to buffer in the queue (per source).
+            yolo_model_name (str): Name of the YOLO model to use for object detection.
+            fps: Desired frames per second for reading from each source.
+
+
+            **kwargs:
+                Additional parameters that are passed directly to the
+                `VideoProcessor` constructor. Common options include:
+                - id (int): Unique identifier for the source, it is the path of a video stream or an integer for a camera stream, used by opencv.VideoStream.
+                - yolo (str): Path or identifier of the YOLO model.
+
+                [optional]:
+                - face_recogniser_threshold (float): Threshold for face recognition, defaults to 0.5.
+                - scale_size (int): Desired scale size for processing (default, 100 which means 'no scale', alias: 100% of the image).
+                - batch_size (int): Number of frames to batch process, defaults to 1.
+                - timeout (float): Timeout in seconds for queue operations, defaults to 0.1, in FrameSource raise queue.Full and skip the frame, in FrameController raise queue.Empty.
+                - fps (int): Desired frames per second, defaults to 30.
+                - device (str): Hardware device to run processing on (default device is cuda if available, mps if available, else cpu).
+                - view (bool): If True, it shows the captured frames and yolo's annotated frames.
+        Returns:
+            VideoFrameController:
+                A newly created `VideoFrameController` containing all QueuedFrameSource.
+    """
+    vpfcf = VideoProcessorFrameControllerFactory()
+    controller = vpfcf.initializer( sources,
+                                    yolo=yolo_model_name,
+                                    max_queue_size=max_queue_size,
+                                    fps=fps,
+                                    **kwargs)
+    return controller
 
 

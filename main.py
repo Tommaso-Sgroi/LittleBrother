@@ -1,116 +1,97 @@
-import multiprocessing
-import time
 from multiprocessing import Queue
-from typing import Union
+from threading import Thread
 
-import cv2
-import torch
-
-from camera.frame_controller import VideoFrameController
-from camera.frame_source import QueuedFrameSource
-from face_recognizer.face_recognizer import FaceRecognizer
+from db.db_lite import TBDatabase
+from local_utils.config import Config, load_config
 from local_utils.logger import get_logger
-from local_utils.view import view
+from time import sleep
+from main.video_processor import initialize_frame_controller
+from main.telegram_bot import TelegramBotProcess
+import signal
+import sys
 
 logger = get_logger(__name__)
 
 
+def init_database(config: Config):
+    db = TBDatabase(config.db_path, drop_db=config.drop_db)  # todo change me
+    return db
 
 
+def init_telegram_bot(queue, config: Config):
+    telegram_bot_process = TelegramBotProcess(config=config, img_queue=queue)
+    return telegram_bot_process
 
 
-
-def start_video_processing(sources: list[multiprocessing.Process], queue:multiprocessing.Queue):
-    processes = []
-
-    # for vp in sources:
-    #     p = multiprocessing.Process(target=process_video_frames, args=(vp,), )
-    #     processes.append(p)
-    #     p.start()
-    return processes
-
-def initialize_frame_controller(sources: list[Union[str, int]],
-                                yolo_model_name:str,
-                                max_queue_size:int=None,
-                                fps:int=15,
-                                **kwargs) -> VideoFrameController:
-    """
-    Initializes the camera resources and returns the video frame initializer.
-        Args:
-            sources (Union[str, int]):
-                - If `int`, the camera device index from which to read frames.
-                - If `str`, a path to a video file on the filesystem.
-            max_queue_size: Maximum number of frames to buffer in the queue (per source).
-            yolo_model_name (str): Name of the YOLO model to use for object detection.
-            fps: Desired frames per second for reading from each source.
+def init_frame_controller(config: Config):
+    frame_controller = initialize_frame_controller(**config.frame_controller_config)
+    return frame_controller
 
 
-            **kwargs:
-                Additional parameters that are passed directly to the
-                `VideoProcessor` constructor. Common options include:
-                - id (int): Unique identifier for the source, it is the path of a video stream or an integer for a camera stream, used by opencv.VideoStream.
-                - yolo (str): Path or identifier of the YOLO model.
+def handle_signal(processes):
+    def signal_handler(sig, frame):
+        logger.info('SIGINT received')
+        for p in processes: p.stop()
+        for p in processes: p.join()
+        sys.exit(0)
+    signal.signal(signal.SIGINT, signal_handler)
+    # signal.signal(signal.SIGKILL, signal_handler)
+    signal.pause()
 
-                [optional]:
-                - face_recogniser_threshold (float): Threshold for face recognition, defaults to 0.5.
-                - scale_size (int): Desired scale size for processing (default, 100 which means 'no scale', alias: 100% of the image).
-                - batch_size (int): Number of frames to batch process, defaults to 1.
-                - timeout (float): Timeout in seconds for queue operations, defaults to 0.1, in FrameSource raise queue.Full and skip the frame, in FrameController raise queue.Empty.
-                - fps (int): Desired frames per second, defaults to 30.
-                - device (str): Hardware device to run processing on (default device is cuda if available, mps if available, else cpu).
-                - view (bool): If True, it shows the captured frames and yolo's annotated frames.
-        Returns:
-            VideoFrameController:
-                A newly created `VideoFrameController` containing all QueuedFrameSource.
-    """
-    from main.video_processor import VideoProcessorFrameControllerFactory
+def main(database):
+    while True:
+        sleep(1)
+        detections = frame_controller.get_frames()  # list[Union[int, str], list[str, tuple[str, str]]]
+        if len(detections) == 0:
+            continue
+        for camera_id, person_img in detections:
+            person, img = person_img
+            has_access = database.has_access_to_room(person, camera_id)
+            if has_access:
+                continue
 
-    vpfcf = VideoProcessorFrameControllerFactory()
-    controller = vpfcf.initializer( sources,
-                                    yolo=yolo_model_name,
-                                    max_queue_size=max_queue_size,
-                                    fps=fps,
-                                    **kwargs)
-    return controller
+            logger.critical(f'Person {person} has no access to room {camera_id}')
+            if person is None: person = 'Unknown'
 
-
-def terminate_video_processing(processes):
-    logger.info("[main] Terminating children...")
-    for p in processes:
-        p.terminate()
-
-    for p in processes:
-        p.join(timeout=1)
-        if p.is_alive():
-            logger.critical("[main] Forcing kill on", p.pid)
-            p.kill()
-
-
+            camera_name = database.get_camera_name(camera_id)
+            message_queue.put((camera_name, person, img))
 
 
 if __name__ == "__main__":
-    video_paths = [
-        0,
-        # 'datasets/SamsungGear360.mp4'
-    ]
 
-    frame_controller = initialize_frame_controller(video_paths, fps=30, yolo_model_name='yolo11n', scale_size=50)
-    # vc = cv2.VideoCapture(0)
-    # for i in range(1000):
-    #     ret, frame = vc.read()
-    #     view(frame, scale=1)
-    # quit()
-    frame_controller.start()
-    from time import sleep
+    config: Config = load_config()
 
-    while True:
-        sleep(1)
-        sourceids_frames = frame_controller.get_frames()
-        # [frame_source_id, ('label', frame)]
-        if len(sourceids_frames) > 0:
-            pass
-        print('Aiuto')
-        for label, frame in sourceids_frames:
-            print(label, frame)
-            view(frame, winname=label)
+    message_queue = Queue()
 
+    database = init_database(config)
+    frame_controller = init_frame_controller(config)
+    telegram_bot = init_telegram_bot(message_queue, config)
+
+    processes = [frame_controller, telegram_bot]
+    # spawn a thread to handle signals
+    signal_handler = Thread(target=handle_signal, args=(processes.copy(),), daemon=True)
+
+    processes.append(signal_handler)
+    for p in processes:
+        p.start()
+
+    with database() as database:
+        main(database)
+
+
+    for p in processes:
+        p.join()
+
+    # frame_controller.start()
+    # frame_controller.stop_sources()
+    #
+    # while True:
+    #     sleep(1)
+    #     sourceids_frames = frame_controller.get_frames()
+    #     # [frame_source_id, ('label', frame)]
+    #     if len(sourceids_frames) > 0:
+    #         pass
+    #     print('Aiuto')
+    #     for label, frame in sourceids_frames:
+    #         print(label, frame)
+    #         view(frame, winname=label)

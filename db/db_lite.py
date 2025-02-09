@@ -127,6 +127,29 @@ class TDBAtomicConnection(l.Logger):
         return self.conn
 
     # Get from db
+    def has_access_to_room(self, user_name: str, camera_id: int) -> bool:
+        cursor = self.get_cursor()
+        try:
+            cursor.execute("SELECT COUNT(camera_id) FROM AccessList WHERE listed = 'w' AND camera_id=? AND user_name=? LIMIT 1", (camera_id, user_name))
+            listed = cursor.fetchone()[0]
+            return bool(listed)
+        except Exception as e:
+            self.logger.error("Error during access list selection: %s", e)
+        finally:
+            cursor.close()
+
+    def get_camera_name(self, camera_id: int) -> str:
+        cursor = self.get_cursor()
+        try:
+            cursor.execute("SELECT camera_name FROM Cameras WHERE camera_id=? LIMIT 1", (camera_id,))
+            camera_name = cursor.fetchone()[0]
+            return camera_name
+        except Exception as e:
+            self.logger.error("Error during camera name selection: %s", e)
+        finally:
+            cursor.close()
+
+
     def user_exist(self, user_id: int) -> bool:
         cursor = self.get_cursor()
         try:

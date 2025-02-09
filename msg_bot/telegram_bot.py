@@ -10,6 +10,7 @@ from pathlib import Path
 from logging import DEBUG, INFO
 from random import randint
 
+from local_utils.config import config
 from local_utils.logger import get_logger
 from msg_bot.utils import require_auth, empty_answer_callback_query, override_call_message_id_with_from_user_id
 from db.db_lite import TBDatabase, get_database
@@ -21,13 +22,13 @@ from PIL import Image
 This code is a bit rushed and must, i repeat MUST, be refactored to be at least something apparently good
 '''
 
-bot = telebot.TeleBot(os.getenv("TELEGRAM_BOT_TOKEN"))
-DB: TBDatabase = get_database(os.getenv('DB_PATH'), dropdb=False)
+bot = telebot.TeleBot(config.telegram_bot_token)
+DB: TBDatabase = get_database(config.db_path, dropdb=config.drop_db)
 
 logger = get_logger(__name__)
 
-auth_token = os.getenv("AUTH_TOKEN")
-basedir_enroll_path = './registered_faces'  # TODO change to an actual option
+auth_token = config.auth_token
+basedir_enroll_path = config.basedir_enroll_path
 
 BLACK_LISTED, WHITE_LISTED, PERSON_UNICODE = u"\U0001F6AB", u"\U00002705", u'\U0001F464'
 
@@ -103,19 +104,18 @@ def send_detection_img(img: Union[Image.Image, np.ndarray], *, person_detected_n
         users = db.get_users()
 
     buf = BytesIO()
-    if isinstance(img, Image.Image):
-        img.save(buf, format='JPEG')
-    else:
+    if not isinstance(img, Image.Image):
+        # convert to PIL image
         if img.dtype != np.uint8:
             img = img.astype(np.uint8)
-        pil_img = Image.fromarray(img)
-        pil_img.save(buf, format='JPEG')
+        img = Image.fromarray(img)
+
+    img.save(buf, format='JPEG')
 
     caption = f'Violation detected, "{person_detected_name}" has accessed to {access_camera_name}'
-    buf.seek(0)
     for user_id in users:
-        bot.send_photo(chat_id=user_id, photo=buf, caption=caption)
         buf.seek(0)
+        bot.send_photo(chat_id=user_id, photo=buf, caption=caption)
 
     global logger
     logger.info("All users notified of the violation by %s in camera %s", person_detected_name, access_camera_name)
@@ -465,8 +465,7 @@ def start_bot(logger_level):
     bot.polling(logger_level=logger_level, skip_pending=True)
 
 def stop_bot():
-    import signal
-    os.kill(os.getpid(), signal.SIGKILL)
+    bot.stop_bot()
 
 if __name__ == '__main__':
     DB = get_database('database.db', dropdb=False)
@@ -476,22 +475,3 @@ if __name__ == '__main__':
         db.add_camera(3, 'camera3')
         db.add_camera(4, 'camera4')
     start_bot(DEBUG)
-
-
-    # from threading import Thread
-    # t = Thread(target=start_bot, args=(DEBUG,), daemon=False)
-    # t.start()
-    #
-    # from time import sleep
-    # sleep(5)
-    # print('hi')
-    #
-    # pil_test = Image.new('RGB', (200, 200), color='red')
-    # send_detection_img(pil_test)
-    #
-    # random_img = np.random.randint(0, 255, (300, 400, 3), dtype=np.uint8)
-    # send_detection_img(random_img)
-    # print('hello')
-    # import sys
-    # stop_bot()
-    # sys.exit(0)

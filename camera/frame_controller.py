@@ -5,7 +5,7 @@ from threading import Thread, Lock
 from numpy import ndarray
 
 from local_utils.logger import Logger
-from .frame_source import QueuedFrameSource, FrameSource
+from .frame_source import FrameSource
 
 
 class VideoFrameController(Thread, Logger):
@@ -119,6 +119,9 @@ class VideoFrameController(Thread, Logger):
 
     def stop_sources(self):
         self.logger.info(f'stopping frame sources')
-        for source in self.sources: source.kill()
+        for source in self.sources: source.terminate()
         for source in self.sources: source.join()
         self.logger.info(f'stopped all frame sources')
+
+    def stop(self):
+        self.stop_sources()
