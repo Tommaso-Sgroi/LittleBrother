@@ -2,6 +2,7 @@ from queue import Empty
 from time import sleep
 
 from camera.video_frame_initializer import QueuedFrameControllerFactory
+from main.video_processor import VideoProcessorFrameControllerFactory
 from people_detector.people_detector import PeopleDetector
 from local_utils.view import view
 from local_utils.logger import init_logger
@@ -17,13 +18,22 @@ if __name__ == '__main__':
 
     videos = [video.strip() for video in videos] + [0]
     videos = [0]
-    fps = 120
+    fps = 30
 
-    controller = QueuedFrameControllerFactory().initializer(videos, timeout=-1, fps=60)
+    # controller = QueuedFrameControllerFactory().initializer(videos, timeout=-1, fps=60)
 
     yolosize = 'n'
     yolo11 = PeopleDetector(f"yolo11{yolosize}.pt", verbose=False, )
     yolo11.to('cpu')
+
+    controller = (VideoProcessorFrameControllerFactory()
+                  .initializer(videos,
+                                yolo='yolo11n.pt',
+                                max_queue_size=None,
+                                fps=fps,
+                                timeout = -1,
+                                scale_size=50))
+
     #
     # overlap_threshold = 0.0005
     # area_threshold = 700
@@ -56,7 +66,7 @@ if __name__ == '__main__':
         controller.start()
         i = 0
         while True:
-            sleep(1)
+            sleep(10)
             sourceids_frames = controller.get_frames()
             if DETECT_PEOPLE:
                 plot_detected_people(sourceids_frames)
@@ -66,6 +76,7 @@ if __name__ == '__main__':
         controller.start_frame_sources()
         while controller.has_alive_sources():
             try:
+                sleep(10)
                 sourceids_frames = controller.fetch_and_get_frames()
             except Empty:
                 continue

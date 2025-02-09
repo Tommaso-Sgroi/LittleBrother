@@ -17,7 +17,7 @@ class AbstractFrameControllerFactory(ABC):
         pass
 
     @abstractmethod
-    def initializer(self, sources_path: list[Union[str,int]], max_queue_size=None, fps=15, **kwargs) -> VideoFrameController:
+    def initializer(self, sources: list[Union[str,int]], max_queue_size=None, fps=15, **kwargs) -> VideoFrameController:
         pass
 
     def _instantiate_source(self, sources, **kwargs) -> list[FrameSource]:
@@ -29,7 +29,7 @@ class AbstractFrameControllerFactory(ABC):
 
 class QueuedFrameControllerFactory(AbstractFrameControllerFactory):
 
-    def initializer(self, sources_path: list[Union[str,int]], max_queue_size=None, fps=15, **kwargs) -> VideoFrameController:
+    def initializer(self, sources: list[Union[str,int]], max_queue_size=None, fps=15, timeout=0.1, **kwargs) -> VideoFrameController:
         """
         Creates and configures a video frame controller along with its associated video sources.
 
@@ -40,7 +40,7 @@ class QueuedFrameControllerFactory(AbstractFrameControllerFactory):
           4. Wraps all created sources in a `VideoFrameController`, which coordinates the fetching and handling of frames.
 
         Args:
-            sources_path (list):
+            sources (list):
                 A list of file paths to the videos that will be processed.
             max_queue_size (int, optional):
                 The maximum number of items the frame queue can hold.
@@ -55,10 +55,10 @@ class QueuedFrameControllerFactory(AbstractFrameControllerFactory):
                 A controller object that manages all `VideoSource` instances and coordinates frame retrieval.
         """
         if max_queue_size is None:
-            max_queue_size = len(sources_path) * fps + 1
+            max_queue_size = len(sources) * fps + 1
 
         fifo_queue = Queue(maxsize=max_queue_size)
-        frame_sources = self._instantiate_source(sources_path, fps=fps, fifo_queue=fifo_queue, **kwargs)
+        frame_sources = self._instantiate_source(sources, fps=fps, fifo_queue=fifo_queue, **kwargs)
 
         frame_controller = VideoFrameController(frame_sources, fifo_queue=fifo_queue)
         return frame_controller
@@ -66,8 +66,8 @@ class QueuedFrameControllerFactory(AbstractFrameControllerFactory):
 
     def build_source(self, source: Union[str, int], **kwargs) -> FrameSource:
         if isinstance(source, int):
-            return CameraSource(id=source, camera_name=source, **kwargs)
+            return CameraSource(id=source, **kwargs)
         elif os.path.isfile(source):
-            return VideoSource(id=source, video_name=os.path.basename(source), **kwargs)
+            return VideoSource(id=source, **kwargs)
         else:
             raise ValueError(f"Invalid source path: {source}")

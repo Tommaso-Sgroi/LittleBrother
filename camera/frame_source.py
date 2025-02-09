@@ -41,12 +41,12 @@ class FrameSource(ABC, Process, Logger):
         pass
 
 class QueuedFrameSource(FrameSource, ABC):
-    def __init__(self, id, source_name, fifo_queue: Queue, timeout:float, fps:int, **kwargs):
+    def __init__(self, id, fifo_queue: Queue, timeout:float, fps:int, **kwargs):
         FrameSource.__init__(self, id, **kwargs)
         self.queue = fifo_queue
         self.timeout = timeout
         self.fps = fps
-        self.source_name = source_name
+        # self.source_name = source_name
 
     @rate_limit
     def read(self):
@@ -72,20 +72,22 @@ class QueuedFrameSource(FrameSource, ABC):
         try:
             self.create_stream()
             if not self.stream.isOpened():
-                self.logger.error(f'[{self.source_name}]cannot open stream {self.id}')
+                self.logger.error(f'[{self.id}]cannot open stream')
                 return 1
+
+            print("i'm up and running")
 
             while True:
                 frame = self.next()
                 try:
                     self.queue_video_frame(frame)
                 except queue.Full:
-                    self.logger.debug(f'[{self.source_name}] cannot send video frame: queue full, skipping frame')
+                    self.logger.debug(f'[{self.id}] cannot send video frame: queue full, skipping frame')
                 except Exception as ex:
-                    self.logger.critical(f'[{self.source_name}] cannot send video frame: %s', ex)
+                    self.logger.critical(f'[{self.id}] cannot send video frame: %s', ex)
                     return 1
         except StopIteration:
-            self.logger.info(f'[{self.source_name}] no more frames, exiting')
+            self.logger.info(f'[{self.id}] no more frames, exiting')
             return 0
         finally:
             self.stream.release()
