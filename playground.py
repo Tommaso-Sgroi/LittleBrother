@@ -5,6 +5,7 @@ import cv2
 import torch
 from ultralytics import YOLO
 
+from motion_detector.motion_detector import MotionDetector
 from face_recognizer.face_recognizer import FaceRecognizer
 
 
@@ -22,6 +23,9 @@ def process_video_frames(video_path):
         if torch.cuda.is_available()
         else ("mps" if torch.backends.mps.is_available() else "cpu")
     )
+
+    motion_detector = MotionDetector()
+
     yolo_model = YOLO("yolo11n.pt")
     face_recognizer = FaceRecognizer(threshold=0.5)  # device=device)
 
@@ -43,8 +47,12 @@ def process_video_frames(video_path):
 
         frame = rescale_frame(frame, percent=50)
 
-        batch_frames.append(frame)
         frame_count += 1
+
+        if motion_detector(frame):
+            batch_frames.append(frame)
+        else:
+            continue
 
         # When the batch is full or end-of-video is reached, process the batch.
         if len(batch_frames) == batch_size:
