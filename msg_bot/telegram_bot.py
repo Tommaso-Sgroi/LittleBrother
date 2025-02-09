@@ -17,7 +17,7 @@ from db.db_lite import TBDatabase, get_database
 from face_recognizer.face_recognizer import FaceRecognizer
 from io import BytesIO
 from PIL import Image
-
+import cv2
 '''
 This code is a bit rushed and must, i repeat MUST, be refactored to be at least something apparently good
 '''
@@ -104,11 +104,16 @@ def send_detection_img(img: Union[Image.Image, np.ndarray], *, person_detected_n
         users = db.get_users()
 
     buf = BytesIO()
-    if not isinstance(img, Image.Image):
-        # convert to PIL image
+    if isinstance(img, Image.Image):
+        img = img
+    else:
+        # 'img' is likely a NumPy array in BGR
         if img.dtype != np.uint8:
             img = img.astype(np.uint8)
-        img = Image.fromarray(img)
+        # Convert from BGR to RGB
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        # Now create a PIL image
+        img = Image.fromarray(img_rgb)
 
     img.save(buf, format='JPEG')
 
