@@ -17,11 +17,31 @@ from main.telegram_bot import TelegramBotProcess
 
 def init_database(config: Config):
     db = TBDatabase(config.db_path, drop_db=config.drop_db)
+
+    cameras_names = config.frame_controller_config.get("sources")
+    if config.fake_camera_mode:
+        used_ids = {
+            c for c in cameras_names
+            if isinstance(c, int) and c > 0
+        }
+
+        max_id = max(used_ids) if len(used_ids) > 0 else 0
+        for i in range(len(cameras_names)):
+            cameras_names[i][0] = max_id
+            cameras_names[i][1] = f"FakeCamera-{max_id}"
+            max_id += 1
+
+    with db() as db_conn:
+        for camera_id, camera_name in cameras_names:
+            db_conn.add_camera(camera_id, camera_name)
     return db
 
 
 def init_frame_controller(config: Config):
-    frame_controller = initialize_frame_controller(**config.frame_controller_config)
+    conf = config.frame_controller_config.copy()
+    # remove all second elements of the tuple
+    conf["sources"] = [x[0] for x in conf["sources"]]
+    frame_controller = initialize_frame_controller(**conf)
     return frame_controller
 
 

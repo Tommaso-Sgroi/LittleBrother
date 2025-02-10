@@ -50,8 +50,11 @@ class Config:
             "scale_size": fc_cfg.get("scale_size", 100),
             "view": fc_cfg.get("view", False),
             "device": fc_cfg.get("device", "cpu"),
-            "face_recogniser_threshold": fc_cfg.get("face_recogniser_threshold", 0.5)
+            "face_recogniser_threshold": fc_cfg.get("face_recogniser_threshold", 0.5),
         }
+
+        self.fake_camera_mode = config_dict.get("fake_camera_mode", False)
+
         for k, v in self.frame_controller_config.items():
             if isinstance(v, ConfigException):
                 raise v

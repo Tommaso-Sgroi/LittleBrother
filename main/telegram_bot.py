@@ -56,8 +56,7 @@ class TelegramBotProcess(Process, Logger):
                     access_camera_name=camera_name
                 )
             except Empty:
-                # No new images right now, check again
-                continue
+                self.logger.debug("Notifications queue is empty")
             except Exception as e:
                 self.logger.error(f"Error processing notification: {e}")
 
