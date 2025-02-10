@@ -1,3 +1,5 @@
+from threading import Thread
+
 import msg_bot.telegram_bot as t_bot
 from multiprocessing import Process, Queue
 from queue import Empty
@@ -20,6 +22,7 @@ class TelegramBotProcess(Process, Logger):
         self.config = config
         self.notifications_queue = notifications_queue
         self.bot_thread = None
+        self._quit = False
 
     def start_bot(self):
         """
@@ -47,7 +50,7 @@ class TelegramBotProcess(Process, Logger):
         and calls 't_bot.send_detection_img(...)' to send them via Telegram.
         Stops when the bot thread is no longer alive.
         """
-        while self.bot_thread.is_alive():
+        while not self._quit:
             try:
                 img, person, camera_name = self.notifications_queue.get(timeout=1)
                 t_bot.send_detection_img(
@@ -65,7 +68,12 @@ class TelegramBotProcess(Process, Logger):
         Entry point of the Process. Starts the bot in a thread, then
         loops to send images from the queue until the bot thread is dead.
         """
-        self.start_bot()
-        self.send_images()
+
+        t = Thread(target=self.send_images, daemon=True)
+        t.start()
+        t_bot.start_bot(self.config.logger_config["level"], skip_pending=True)
+        self._quit = True
+        self.logger.info("Bot thread ended")
+        t.join()
         # Once the bot thread ends, we exit run().
         return 0

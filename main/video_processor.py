@@ -105,9 +105,9 @@ class VideoProcessor(QueuedFrameSource):
 
         total_time = time.time() - start_time
         average_fps = frame_count / total_time if total_time > 0 else 0
-        print(f"\n[{self.id}] Average FPS: {average_fps:.2f}")
-        print(f"[{self.id}] Total frames: {frame_count}")
-        print(f"[{self.id}] Total time: {total_time:.2f}s\n")
+        # print(f"\n[{self.id}] Average FPS: {average_fps:.2f}")
+        # print(f"[{self.id}] Total frames: {frame_count}")
+        # print(f"[{self.id}] Total time: {total_time:.2f}s\n")
 
         return detections
 

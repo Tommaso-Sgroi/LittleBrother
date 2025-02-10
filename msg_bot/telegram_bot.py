@@ -23,6 +23,9 @@ This code is a bit rushed and must, i repeat MUST, be refactored to be at least 
 '''
 config = local_utils.config.config
 
+if config is None:
+    config = local_utils.config.load_config()
+
 bot = telebot.TeleBot(config.telegram_bot_token)
 DB: TBDatabase = get_database(config.db_path, dropdb=config.drop_db)
 
@@ -490,4 +493,4 @@ if __name__ == '__main__':
         db.add_camera(2, 'camera2')
         db.add_camera(3, 'camera3')
         db.add_camera(4, 'camera4')
-    start_bot(0)
+    start_bot(0, skip_pending=True)
