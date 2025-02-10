@@ -1,5 +1,6 @@
 import sys
 from multiprocessing import Process, Queue
+from threading import Thread
 from time import sleep
 
 from db.db_lite import TBDatabase, TDBAtomicConnection
@@ -45,32 +46,14 @@ def init_frame_controller(config: Config):
     return frame_controller
 
 
-def handle_signal(processes):
-    def signal_handler(sig, frame):
-        logger.info("SIGINT received")
-        # Terminate all processes
-        for process in processes:
-            if process.is_alive():
-                process.terminate()
-                process.join()
-
-
-        sys.exit(0)
-
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.pause()
-
-
 def check_access(person, camera_id, database: TDBAtomicConnection):
     has_access = database.has_access_to_room(person, camera_id)
     return has_access
 
 
-def main_process(config, notifications_queue: Queue):
+def main(database, frame_controller):
     # Initialize resources locally in the process
-    database = init_database(config)
 
-    frame_controller = init_frame_controller(config)
     frame_controller.start_frame_sources()
 
     while not frame_controller.sources_setup_complete():
@@ -104,24 +87,32 @@ def main_process(config, notifications_queue: Queue):
 if __name__ == "__main__":
 
     init_logger(config)
+    database = init_database(config)
+
 
     # Create notifications queue
     notifications_queue = Queue()
+    frame_controller = init_frame_controller(config)
 
-    # spawn processes
-    telegram_bot = TelegramBotProcess(config, notifications_queue,
-        target=t_bot.start_bot,
-        daemon=False,
-    )
-    main_proc = Process(
-        target=main_process, args=(config, notifications_queue), daemon=False
-    )
-
-    processes = [telegram_bot, main_proc]
+    telegram_bot = Thread(target=t_bot.start_bot, args=(config.logger_config['level'], True), daemon=False)
+    main_thread = Thread(target=main, args=(database, frame_controller), daemon=False)
 
     telegram_bot.start()
+    sleep(1)
+    main_thread.start()
 
-    main_proc.start()
 
-    handle_signal(processes)
-    sys.exit(0)
+    def handle_signal(sig, frame):
+        def signal_handler(sig, frame):
+            logger.info("SIGINT received")
+            # Terminate all processes
+            t_bot.stop_bot()
+            frame_controller.stop_sources()
+            return 1
+
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.pause()
+
+    signal.signal(signal.SIGINT, handle_signal)
+
+
