@@ -5,7 +5,7 @@ from typing import Union, Any
 
 from .camera_source import CameraSource
 from .frame_controller import VideoFrameController
-from .frame_source import QueuedFrameSource, FrameSource
+from .frame_source import FrameSource
 from .video_source import VideoSource
 
 

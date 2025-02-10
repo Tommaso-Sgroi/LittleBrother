@@ -51,6 +51,9 @@ class Config:
             "view": fc_cfg.get("view", False),
             "device": fc_cfg.get("device", "cpu"),
             "face_recogniser_threshold": fc_cfg.get("face_recogniser_threshold", 0.5),
+            "motion_detector_threshold": fc_cfg.get("motion_detector_threshold", 0.5),
+            "motion_detector_min_area" : fc_cfg.get("motion_detector_min_area", 500),
+            "motion_detector": fc_cfg.get("motion_detector", "mog2"),
         }
 
         self.fake_camera_mode = config_dict.get("fake_camera_mode", False)

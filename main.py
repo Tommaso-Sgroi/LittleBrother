@@ -1,12 +1,10 @@
-import sys
-from multiprocessing import Process, Queue
+from multiprocessing import Queue
 from threading import Thread
 from time import sleep
 
 from db.db_lite import TBDatabase, TDBAtomicConnection
 from local_utils.config import Config, load_config
 from local_utils.logger import get_logger, init_logger
-from local_utils.view import view
 from main.video_processor import initialize_frame_controller
 import signal
 
@@ -14,8 +12,6 @@ logger = get_logger(__name__)
 config: Config = load_config()
 
 import msg_bot.telegram_bot as t_bot
-from main.telegram_bot import TelegramBotProcess
-
 
 def init_database(config: Config):
     db = TBDatabase(config.db_path, drop_db=config.drop_db)

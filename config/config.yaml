@@ -16,6 +16,9 @@ frame_controller:
   timeout: 0.1
   scale_size: 100
   face_recogniser_threshold: 0.5
+  motion_detector_threshold: 0.5
+  motion_detector_min_area: 500
+  motion_detector: "mog2"
   view: true
 
 fake_camera_mode: false # fakes video to cameras, useful for testing and debugging while inserting information into the database

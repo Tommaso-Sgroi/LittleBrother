@@ -18,6 +18,9 @@ class VideoProcessor(QueuedFrameSource):
     def __init__(self, id, *,
                  yolo: str,
                  face_recogniser_threshold=0.5,
+                 motion_detector_threshold= 0.5,
+                 motion_detector_min_area=500,
+                 motion_detector= "mog2",
                  scale_size=100,
                  batch_size: int = 1,
                  fifo_queue: Queue,
@@ -38,9 +41,12 @@ class VideoProcessor(QueuedFrameSource):
         self.batch_size = batch_size
         self.scale_size = scale_size
         self.view = view
+        self.motion_detector_threshold = motion_detector_threshold
+        self.motion_detector_min_area = motion_detector_min_area
+        self.motion_detector = motion_detector
 
     def run(self):
-        self.motion_detector = MotionDetector(detector="mog2", threshold=0.1, min_area=500)
+        self.motion_detector = MotionDetector(detector=self.motion_detector, threshold=self.motion_detector_threshold, min_area=self.motion_detector_min_area)
         self.yolo_model = YOLO(self.yolo_model_name)
         self.face_recognizer = FaceRecognizer(threshold=self.face_recogniser_threshold)
         super().run()
