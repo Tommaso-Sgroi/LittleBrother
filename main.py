@@ -1,4 +1,3 @@
-from multiprocessing import Queue
 from threading import Thread
 from time import sleep
 
@@ -48,68 +47,51 @@ def check_access(person, camera_id, database: TDBAtomicConnection):
     return has_access
 
 
-def main(database, frame_controller):
-    # Initialize resources locally in the process
+def handle_signal(sig, frame, frame_controller):
+    logger.info("SIGINT received, shutting down services.")
+    t_bot.stop_bot()
+    frame_controller.stop_sources()
+    exit(0)
 
+def register_signal_handler(frame_controller):
+    signal.signal(signal.SIGINT, lambda s, f: handle_signal(s, f, frame_controller))
+
+def process_detections(database, frame_controller):
+    """Process detections continuously."""
     frame_controller.start_frame_sources()
-
     while not frame_controller.sources_setup_complete():
         logger.info("Waiting for frame sources to be setup")
         sleep(0.5)
-
     with database() as db:
         while frame_controller.has_alive_sources():
-
             detections = frame_controller.fetch_and_get_frames()
-            if len(detections) == 0:
+            if not detections:
                 continue
-
             for detection in detections:
                 for camera_id, person, img in detection:
-                    # view(img, winname='running')
                     if check_access(person, camera_id, db):
-                        # has access to camera
                         continue
-
-                    logger.critical(f"Person {person} has no access to room {camera_id}")
-                    if person is None:
-                        person = "Unknown"
-
+                    logger.critical(f"Person {person or 'Unknown'} has no access to room {camera_id}")
                     camera_name = db.get_camera_name(camera_id)
-                    # Send notification through queue instead of direct bot call
-                    t_bot.send_detection_img(img, person_detected_name=person, access_camera_name=camera_name)
-        frame_controller.stop_sources()
+                    t_bot.send_detection_img(img, person_detected_name=person or "Unknown", access_camera_name=camera_name)
+    frame_controller.stop_sources()
 
-
-if __name__ == "__main__":
-
+def run_app():
     init_logger(config)
     database = init_database(config)
-
-
-    # Create notifications queue
-    notifications_queue = Queue()
     frame_controller = init_frame_controller(config)
-
-    telegram_bot = Thread(target=t_bot.start_bot, args=(config.logger_config['level'], True), daemon=False)
-    main_thread = Thread(target=main, args=(database, frame_controller), daemon=False)
-
-    telegram_bot.start()
+    register_signal_handler(frame_controller)
+    
+    bot_thread = Thread(target=t_bot.start_bot, args=(config.logger_config['level'], True), daemon=False)
+    detections_thread = Thread(target=process_detections, args=(database, frame_controller), daemon=False)
+    
+    bot_thread.start()
     sleep(5)
-    main_thread.start()
+    detections_thread.start()
+    bot_thread.join()
+    detections_thread.join()
 
-
-    def handle_signal(sig, frame):
-        def signal_handler(sig, frame):
-            logger.info("SIGINT received")
-            # Terminate all processes
-            t_bot.stop_bot()
-            frame_controller.stop_sources()
-            return 1
-
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.pause()
-
-    signal.signal(signal.SIGINT, handle_signal)
+if __name__ == "__main__":
+    run_app()
 
 
