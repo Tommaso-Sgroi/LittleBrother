@@ -71,10 +71,8 @@ class VideoProcessor(QueuedFrameSource):
         if len(detection) > 0:
             self.queue.put([detection], timeout=self.timeout)
 
-    def process_video_frames(self, frames) -> list[Union[tuple[int, str, str]]]:
+    def process_video_frames(self, frames) -> list[list[int, str, str]]:
         # Each process gets its own model and face recognizer
-
-
         batch_frames = [rescale_frame(frame, self.scale_size) for frame in
                         frames if self.motion_detector(frame)]  # Resize the frame to 50% of its original size
 
@@ -86,12 +84,12 @@ class VideoProcessor(QueuedFrameSource):
             batch_frames, classes=[0], device=self.device, verbose=False
         )
 
-        detections = []
         if self.view:
-            annotated_batch_frames = [result.plot() for result in results]
-            self.view_frames(annotated_batch_frames, winname=str(self.id) + ' yolo')
+            self.view_frames([result.plot() for result in results], winname=str(self.id) + ': yolo')
 
+        label_index, detections = 1, []
         for result, frame in zip(results, batch_frames):
+            detect = [self.id, None, frame] # id, label, frame
             boxes = result.boxes.xyxy.type(torch.int32)
             for box in boxes:
                 x1, y1, x2, y2 = box
@@ -101,16 +99,19 @@ class VideoProcessor(QueuedFrameSource):
 
                 faces = self.face_recognizer.recognize_faces(detected_person_image)
                 if len(faces) == 0:
-                    detections.append((self.id, None, frame))
+                    detections.append(detect)
+                    continue
 
                 for detected_face in faces:
-                    if detected_face["label"] is not None:
-                        detections.append((self.id, detected_face["label"], frame))
+                    face_detected = detected_face["label"]
+                    if face_detected is not None:
+                        detect[label_index] = face_detected
+                        detections.append(detect)
                         self.logger.debug(
-                            f"[{self.id}] Detected face: {detected_face['label']} with confidence {detected_face['confidence']}"
+                            "[%s] Detected face: %s with confidence %s", self.id, face_detected, detected_face['confidence']
                         )
                     else:
-                        detections.append((self.id, None, frame))
+                        detections.append(detect)
         return detections
 
     def view_frames(self, batch_frames, winname):

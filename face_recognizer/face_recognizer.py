@@ -139,7 +139,7 @@ class FaceRecognizer(Logger):
         embedding = self.resnet(face_tensor)
         return embedding.to("cpu")
 
-    def recognize_faces(self, images) -> list:
+    def recognize_faces(self, images) -> list[dict]:
         """
         Recognize faces in an image or a batch of images.
         Args:
