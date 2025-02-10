@@ -1,8 +1,6 @@
 from typing import Any
-
 import numpy as np
 from ultralytics import YOLO
-
 from local_utils.logger import Logger
 
 

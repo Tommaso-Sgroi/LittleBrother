@@ -43,10 +43,10 @@ class VideoProcessor(QueuedFrameSource):
         self.view = view
         self.motion_detector_threshold = motion_detector_threshold
         self.motion_detector_min_area = motion_detector_min_area
-        self.motion_detector = motion_detector
+        self.motion_detector_name = motion_detector
 
     def run(self):
-        self.motion_detector = MotionDetector(detector=self.motion_detector, threshold=self.motion_detector_threshold, min_area=self.motion_detector_min_area)
+        self.motion_detector = MotionDetector(detector=self.motion_detector_name, threshold=self.motion_detector_threshold, min_area=self.motion_detector_min_area)
         self.yolo_model = YOLO(self.yolo_model_name)
         self.face_recognizer = FaceRecognizer(threshold=self.face_recogniser_threshold)
         super().run()
@@ -71,15 +71,12 @@ class VideoProcessor(QueuedFrameSource):
         if len(detection) > 0:
             self.queue.put([detection], timeout=self.timeout)
 
-    def process_video_frames(self, frames) -> list[Union[str, tuple[str, str]]]:
+    def process_video_frames(self, frames) -> list[Union[tuple[int, str, str]]]:
         # Each process gets its own model and face recognizer
 
-        start_time = time.time()
-        frame_count = 0
 
         batch_frames = [rescale_frame(frame, self.scale_size) for frame in
                         frames if self.motion_detector(frame)]  # Resize the frame to 50% of its original size
-        frame_count += 1
 
         if len(batch_frames) == 0:
             return []
@@ -94,7 +91,6 @@ class VideoProcessor(QueuedFrameSource):
             annotated_batch_frames = [result.plot() for result in results]
             self.view_frames(annotated_batch_frames, winname=str(self.id) + ' yolo')
 
-        index = 0
         for result, frame in zip(results, batch_frames):
             boxes = result.boxes.xyxy.type(torch.int32)
             for box in boxes:
@@ -115,14 +111,6 @@ class VideoProcessor(QueuedFrameSource):
                         )
                     else:
                         detections.append((self.id, None, frame))
-            index += 1
-
-        total_time = time.time() - start_time
-        average_fps = frame_count / total_time if total_time > 0 else 0
-        # print(f"\n[{self.id}] Average FPS: {average_fps:.2f}")
-        # print(f"[{self.id}] Total frames: {frame_count}")
-        # print(f"[{self.id}] Total time: {total_time:.2f}s\n")
-
         return detections
 
     def view_frames(self, batch_frames, winname):

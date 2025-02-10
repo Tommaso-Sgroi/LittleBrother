@@ -1,10 +1,4 @@
-
-
 import sqlite3
-from os.path import curdir
-
-from psutil import users
-
 import local_utils.logger as l
 
 def get_database(db_path, *, dropdb = False):

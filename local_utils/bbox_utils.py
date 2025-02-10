@@ -1,7 +1,4 @@
-from typing import Any
-
 import numpy as np
-from numpy import ndarray, dtype
 
 
 def merge_overlapping_detections(detections: list, overlap_threshold: float = 0.3):
