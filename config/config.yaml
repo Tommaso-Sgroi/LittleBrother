@@ -18,7 +18,7 @@ frame_controller:
   face_recogniser_threshold: 0.5
   motion_detector_threshold: 0.5
   motion_detector_min_area: 500
-  motion_detector: "mog2"
+  motion_detector: "mog2" # mog2 or optical_flow
   view: true
 
 fake_camera_mode: false # fakes video to cameras, useful for testing and debugging while inserting information into the database

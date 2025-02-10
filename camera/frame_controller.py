@@ -99,7 +99,7 @@ class VideoFrameController(Thread, Logger):
         return self.get_frames()
 
     def run(self, *, timeout=0.1):
-        self.logger.info('starting')
+        self.logger.info('starting sources')
         self.start_frame_sources()
         while self._alive_counter() > 0:
             try:
@@ -115,7 +115,7 @@ class VideoFrameController(Thread, Logger):
 
     def start_frame_sources(self):
         for source in self.sources:
-            self.logger.info(f'starting frame source: {source.id}')
+            self.logger.info('starting frame source: %s', source.id)
             source.start()
         self.start.append(True)
 

@@ -1,4 +1,3 @@
-import time
 from multiprocessing import Queue
 from typing import Union
 
@@ -60,7 +59,7 @@ class VideoProcessor(QueuedFrameSource):
         except StopIteration:
             if len(frames) == 0:
                 # do not discard the last frames
-                self.logger.info(f"[{self.id}] end of video reached.")
+                self.logger.info(f"[%s] end of video reached.", self.id)
                 raise StopIteration('end of video reached')
         return frames
 
@@ -149,6 +148,13 @@ class VideoProcessorFrameControllerFactory(QueuedFrameControllerFactory):
                 - yolo (str): Path or identifier of the YOLO model.
 
                 [optional]:
+            **kwargs:
+                Additional parameters that are passed directly to the
+                `VideoProcessor` constructor. Common options include:
+                - id (int): Unique identifier for the source, it is the path of a video stream or an integer for a camera stream, used by opencv.VideoStream.
+                - yolo (str): Path or identifier of the YOLO model.
+
+                [optional]:
                 - face_recogniser_threshold (float): Threshold for face recognition, defaults to 0.5.
                 - scale_size (int): Desired scale size for processing (default, 100 which means 'no scale', alias: 100% of the image).
                 - batch_size (int): Number of frames to batch process, defaults to 1.
@@ -156,6 +162,10 @@ class VideoProcessorFrameControllerFactory(QueuedFrameControllerFactory):
                 - fps (int): Desired frames per second, defaults to 30.
                 - device (str): Hardware device to run processing on (default device is cuda if available, mps if available, else cpu).
                 - view (bool): If True, it shows the captured frames and yolo's annotated frames.
+                - face_recogniser_threshold: 0.5 (default) - threshold for face recognition.
+                - motion_detector_threshold: 0.5 (default) - threshold for motion detection.
+                - motion_detector_min_area: 500 (default) - minimum area in pixel for motion detection.
+                - motion_detector: "mog2" (default) - motion detector algorithm to use, mog2 or opticalFlow
         Returns:
             FrameSource:
                 A newly created `VideoProcessor` instance that inherits from `QueuedFrameSource`.
@@ -203,6 +213,10 @@ def initialize_frame_controller(sources: list[Union[str, int]],
                 - fps (int): Desired frames per second, defaults to 30.
                 - device (str): Hardware device to run processing on (default device is cuda if available, mps if available, else cpu).
                 - view (bool): If True, it shows the captured frames and yolo's annotated frames.
+                - face_recogniser_threshold: 0.5 (default) - threshold for face recognition.
+                - motion_detector_threshold: 0.5 (default) - threshold for motion detection.
+                - motion_detector_min_area: 500 (default) - minimum area in pixel for motion detection.
+                - motion_detector: "mog2" (default) - motion detector algorithm to use, mog2 or opticalFlow
         Returns:
             VideoFrameController:
                 A newly created `VideoFrameController` containing all QueuedFrameSource.

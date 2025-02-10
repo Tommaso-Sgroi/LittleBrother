@@ -72,22 +72,22 @@ class QueuedFrameSource(FrameSource, ABC):
         try:
             self.create_stream()
             if not self.stream.isOpened():
-                self.logger.error(f'[{self.id}]cannot open stream')
+                self.logger.error('[%s]cannot open stream', self.id)
                 return 1
 
-            print("i'm up and running")
+            self.logger.info("[%s] i'm up and running, starting to send frames", self.id)
 
             while True:
                 frame = self.next()
                 try:
                     self.queue_video_frame(frame)
                 except queue.Full:
-                    self.logger.debug(f'[{self.id}] cannot send video frame: queue full, skipping frame')
+                    self.logger.debug('[%s] cannot send video frame: queue full, skipping frame', self.id)
                 except Exception as ex:
-                    self.logger.critical(f'[{self.id}] cannot send video frame: %s', ex)
+                    self.logger.critical('[%s] cannot send video frame: %s', self.id, ex)
                     return 1
         except StopIteration:
-            self.logger.info(f'[{self.id}] no more frames, exiting')
+            self.logger.info('[%s] no more frames, exiting', self.id)
             return 0
         finally:
             self.stream.release()

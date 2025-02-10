@@ -65,7 +65,7 @@ class FaceRecognizer(Logger):
                     )
                     self.enrolled_labels.append(label)
                 except Exception as e:
-                    self.logger.error(f"Error loading embedding for {label}: {str(e)}")
+                    self.logger.error(f"Error loading embedding for %s: %s", label, e)
                     continue
 
     def enroll_face(self, face_image: Image, label: str) -> bool:
