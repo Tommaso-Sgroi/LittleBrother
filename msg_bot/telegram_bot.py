@@ -1,5 +1,6 @@
 import os
 import re
+from threading import Thread
 from typing import Union
 
 import numpy as np
@@ -7,27 +8,35 @@ import telebot
 import telebot.types as types
 from telebot.formatting import format_text, mbold, hcode
 from pathlib import Path
-from logging import DEBUG, INFO
 from random import randint
+from time import time  # NEW: Import time for cooldown check
 
+import local_utils.config
 from local_utils.logger import get_logger
 from msg_bot.utils import require_auth, empty_answer_callback_query, override_call_message_id_with_from_user_id
-from db.db_lite import TBDatabase
+from db.db_lite import TBDatabase, get_database
 from face_recognizer.face_recognizer import FaceRecognizer
 from io import BytesIO
 from PIL import Image
+import cv2
 
 '''
 This code is a bit rushed and must, i repeat MUST, be refactored to be at least something apparently good
 '''
+config = local_utils.config.config
 
-bot = telebot.TeleBot(os.getenv("TELEGRAM_BOT_TOKEN"))
-DB = TBDatabase('database.db', drop_db=False)
+if config is None:
+    config = local_utils.config.load_config()
+
+bot = telebot.TeleBot(config.telegram_bot_token)
+DB: TBDatabase = get_database(config.db_path, dropdb=config.drop_db)
 
 logger = get_logger(__name__)
 
-auth_token = os.getenv("AUTH_TOKEN")
-basedir_enroll_path = './registered_faces'  # TODO change to an actual option
+notification_tracker = {}
+
+auth_token = config.auth_token
+basedir_enroll_path = config.basedir_enroll_path
 
 BLACK_LISTED, WHITE_LISTED, PERSON_UNICODE = u"\U0001F6AB", u"\U00002705", u'\U0001F464'
 
@@ -64,6 +73,7 @@ class CommandName:
 
         return markup
 
+
 def filter_callback_query(call: types.CallbackQuery, query_type: str) -> bool:
     data = CommandName.decompose(call.data)
     if query_type == data[0]:
@@ -95,29 +105,50 @@ def abort_callback_query(call: types.CallbackQuery):
     return
 
 
-def send_detection_img(img: Union[Image.Image, np.ndarray], *, person_detected_name: str='Unknown', access_camera_name: str='Unknown camera'):
+def send_detection_img(img: Union[Image.Image, np.ndarray], *, person_detected_name: str = 'Unknown',
+                       access_camera_name: str = 'Unknown camera'):
     """
-    When a violation is detected we must notify all registered users
+    When a violation is detected we must notify all registered users.
     """
+    global notification_tracker
+    now = time()
+    tracker = notification_tracker.get(access_camera_name)
+    if tracker:
+        window_start, count = tracker
+        if now - window_start < 60:
+            if count >= 2:
+                logger.info("Cooldown active for camera: %s", access_camera_name)
+                return  # Skip notification due to cooldown
+            else:
+                notification_tracker[access_camera_name] = (window_start, count + 1)
+        else:
+            notification_tracker[access_camera_name] = (now, 1)
+    else:
+        notification_tracker[access_camera_name] = (now, 1)
+
     with DB() as db:
         users = db.get_users()
 
     buf = BytesIO()
     if isinstance(img, Image.Image):
-        img.save(buf, format='JPEG')
+        img = img
     else:
+        # 'img' is likely a NumPy array in BGR
         if img.dtype != np.uint8:
             img = img.astype(np.uint8)
-        pil_img = Image.fromarray(img)
-        pil_img.save(buf, format='JPEG')
+        # Convert from BGR to RGB
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        # Now create a PIL image
+        img = Image.fromarray(img_rgb)
+
+    img.save(buf, format='JPEG')
 
     caption = f'Violation detected, "{person_detected_name}" has accessed to {access_camera_name}'
-    buf.seek(0)
     for user_id in users:
-        bot.send_photo(chat_id=user_id, photo=buf, caption=caption)
         buf.seek(0)
+        bot.send_photo(chat_id=user_id, photo=buf, caption=caption)
 
-    global logger
+    # global logger
     logger.info("All users notified of the violation by %s in camera %s", person_detected_name, access_camera_name)
 
 
@@ -164,12 +195,14 @@ def auth_user(message):
     bot.send_message(message.from_user.id, "send the authentication token chosen by you or provided by the system")
     bot.register_next_step_handler(message, authenticate_user)
 
+
 @bot.message_handler(commands=["logout"])
 @require_auth(db=DB, bot=bot)
 def logout(message):
     with DB() as db:
         db.delete_user(message.from_user.id)
         bot.send_message(message.chat.id, "Logged out")
+
 
 @bot.message_handler(commands=['list'])
 @require_auth(bot=bot, db=DB)
@@ -189,7 +222,6 @@ def list_people(message):
 
 
 # ------------------- CALLBACKS QUERIES -------------------
-
 
 
 @bot.callback_query_handler(func=lambda call: filter_callback_query(call, CommandName.BACK_TO_LIST_PEOPLE))
@@ -461,36 +493,28 @@ def echo_all(message):
         os.path.join('.', 'datasets', pics[randint(1, 4)] + '.jpg')
     ))
 
-def start_bot(logger_level):
-    bot.polling(logger_level=logger_level, skip_pending=True)
+
+def start_bot(logger_level, skip_pending: bool):
+    global bot
+    logger.info('Starting bot')
+    bot.polling(skip_pending=skip_pending, logger_level=logger_level)
+
 
 def stop_bot():
-    import signal
-    os.kill(os.getpid(), signal.SIGKILL)
+    bot.stop_bot()
+
+
+class TelegramBotThread(Thread):
+    def stop(self):
+        global bot
+        bot.stop_bot()
+
 
 if __name__ == '__main__':
+    DB = get_database('database.db', dropdb=False)
     with DB() as db:
         db.add_camera(1, 'camera1')
         db.add_camera(2, 'camera2')
         db.add_camera(3, 'camera3')
         db.add_camera(4, 'camera4')
-    start_bot(DEBUG)
-
-
-    # from threading import Thread
-    # t = Thread(target=start_bot, args=(DEBUG,), daemon=False)
-    # t.start()
-    #
-    # from time import sleep
-    # sleep(5)
-    # print('hi')
-    #
-    # pil_test = Image.new('RGB', (200, 200), color='red')
-    # send_detection_img(pil_test)
-    #
-    # random_img = np.random.randint(0, 255, (300, 400, 3), dtype=np.uint8)
-    # send_detection_img(random_img)
-    # print('hello')
-    # import sys
-    # stop_bot()
-    # sys.exit(0)
+    start_bot(0, skip_pending=True)

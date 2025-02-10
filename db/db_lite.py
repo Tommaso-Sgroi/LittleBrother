@@ -1,11 +1,8 @@
-
-
 import sqlite3
-from os.path import curdir
-
-from psutil import users
-
 import local_utils.logger as l
+
+def get_database(db_path, *, dropdb = False):
+    return TBDatabase(db_path, dropdb)
 
 class TBDatabase(l.Logger):
     """
@@ -83,7 +80,7 @@ class TDBAtomicConnection(l.Logger):
             -- handles the registered users, so the users which can access the system and are 
             -- authenticated via the telegram bot
             -- the user_id is the telegram user id
-            user_id INTEGER UNSIGNED PRIMARY KEY
+            user_id INTEGER  PRIMARY KEY
         );
         /*      
         CREATE TABLE IF NOT EXISTS EnrolledPeople (
@@ -94,7 +91,7 @@ class TDBAtomicConnection(l.Logger):
               
         CREATE TABLE IF NOT EXISTS Cameras (
             -- handles the registered cameras, so the cameras which can access the system and are
-            camera_id INTEGER UNSIGNED PRIMARY KEY,
+            camera_id INTEGER  PRIMARY KEY,
             camera_name TEXT UNIQUE
         );      
         CREATE TABLE IF NOT EXISTS AccessList (
@@ -104,7 +101,7 @@ class TDBAtomicConnection(l.Logger):
         -- the user_name is a chosen name by the authed user, it can be anything 
         -- to identify the user in the system
             user_name TEXT,
-            camera_id INTEGER UNSIGNED, 
+            camera_id INTEGER , 
             listed VARCHAR(1) NOT NULL CHECK(listed IN ('b','w')) DEFAULT 'b',
             FOREIGN KEY (camera_id) REFERENCES Cameras(camera_id) ON DELETE CASCADE,
             -- FOREIGN KEY (user_name) REFERENCES EnrolledPeople(user_name) ON DELETE CASCADE,
@@ -124,6 +121,29 @@ class TDBAtomicConnection(l.Logger):
         return self.conn
 
     # Get from db
+    def has_access_to_room(self, user_name: str, camera_id: int) -> bool:
+        cursor = self.get_cursor()
+        try:
+            cursor.execute("SELECT COUNT(camera_id) FROM AccessList WHERE listed = 'w' AND camera_id=? AND user_name=? LIMIT 1", (camera_id, user_name))
+            listed = cursor.fetchone()[0]
+            return bool(listed)
+        except Exception as e:
+            self.logger.error("Error during access list selection: %s", e)
+        finally:
+            cursor.close()
+
+    def get_camera_name(self, camera_id: int) -> str:
+        cursor = self.get_cursor()
+        try:
+            cursor.execute("SELECT camera_name FROM Cameras WHERE camera_id=? LIMIT 1", (camera_id,))
+            camera_name = cursor.fetchone()[0]
+            return camera_name
+        except Exception as e:
+            self.logger.error("Error during camera name selection: %s", e)
+        finally:
+            cursor.close()
+
+
     def user_exist(self, user_id: int) -> bool:
         cursor = self.get_cursor()
         try:

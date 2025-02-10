@@ -65,7 +65,7 @@ class FaceRecognizer(Logger):
                     )
                     self.enrolled_labels.append(label)
                 except Exception as e:
-                    self.logger.error(f"Error loading embedding for {label}: {str(e)}")
+                    self.logger.error(f"Error loading embedding for %s: %s", label, e)
                     continue
 
     def enroll_face(self, face_image: Image, label: str) -> bool:
@@ -139,7 +139,7 @@ class FaceRecognizer(Logger):
         embedding = self.resnet(face_tensor)
         return embedding.to("cpu")
 
-    def recognize_faces(self, images) -> list:
+    def recognize_faces(self, images) -> list[dict]:
         """
         Recognize faces in an image or a batch of images.
         Args:
