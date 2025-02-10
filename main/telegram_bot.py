@@ -1,44 +1,72 @@
+import msg_bot.telegram_bot as t_bot
 from multiprocessing import Process, Queue
-from threading import Thread
-from typing import Union
-
-from local_utils.config import Config, config
+from queue import Empty
 from local_utils.logger import Logger
-from PIL import Image
+
 
 class TelegramBotProcess(Process, Logger):
+    def __init__(self, config, notifications_queue: Queue, **kwargs):
+        """
+        A Process that starts the Telegram bot in a separate thread and
+        consumes images from 'notifications_queue' to send them via the bot.
 
-    def __init__(self, config: Config, img_queue: Queue, **kwargs):
-        Logger.__init__(self, __name__)
+        Args:
+            config: A configuration object that includes 'logger_config' etc.
+            notifications_queue (Queue): A queue from which we pull (img, person, camera_name).
+            kwargs: Additional arguments passed to `multiprocessing.Process`.
+        """
         Process.__init__(self, **kwargs)
+        Logger.__init__(self, name=self.__class__.__name__)
         self.config = config
-        self.img_queue = img_queue
-        self.bot = None
+        self.notifications_queue = notifications_queue
+        self.bot_thread = None
 
+    def start_bot(self):
+        """
+        Create and start the Telegram bot thread, using the config's logger level
+        and the notifications queue.
+        """
+        self.bot_thread = t_bot.TelegramBotThread(
+            target=t_bot.start_bot,
+            args=(self.config.logger_config["level"], self.notifications_queue),
+            daemon=True
+        )
+        self.bot_thread.start()
 
-    def stop(self):
-        self.bot.stop_bot()
-        self.terminate()
-    
+    def terminate(self):
+        """
+        Stop the bot by calling 't_bot.stop_bot()', if implemented to end the polling.
+        """
+        self.bot_thread.stop()
+        self.bot_thread.join()
+        super().terminate()
+
+    def send_images(self):
+        """
+        Continuously fetches (img, person, camera_name) from the notifications queue
+        and calls 't_bot.send_detection_img(...)' to send them via Telegram.
+        Stops when the bot thread is no longer alive.
+        """
+        while self.bot_thread.is_alive():
+            try:
+                img, person, camera_name = self.notifications_queue.get(timeout=1)
+                t_bot.send_detection_img(
+                    img,
+                    person_detected_name=person,
+                    access_camera_name=camera_name
+                )
+            except Empty:
+                # No new images right now, check again
+                continue
+            except Exception as e:
+                self.logger.error(f"Error processing notification: {e}")
+
     def run(self):
-        import msg_bot.telegram_bot as t_bot
-
-        Thread(target=run_img_sender, args=(self.logger, self.img_queue, t_bot.send_detection_img), daemon=True).start()
-
-        t_bot.start_bot(config.logger_config['level'])
-        self.bot = t_bot.bot
-
+        """
+        Entry point of the Process. Starts the bot in a thread, then
+        loops to send images from the queue until the bot thread is dead.
+        """
+        self.start_bot()
+        self.send_images()
+        # Once the bot thread ends, we exit run().
         return 0
-
-
-def run_img_sender(logger, queue: Queue, send_detection_img):
-
-    while True:
-        try:
-            img = queue.get()
-            for camera_name, label, img in img:
-                send_detection_img(img, person_detected_name=label, access_camera_name=camera_name)
-        except Exception as e:
-            logger.fatal(f'error in telegram bot: {e}')
-            break
-    logger.info('exiting')

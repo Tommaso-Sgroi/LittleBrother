@@ -2,7 +2,6 @@ import sys
 from multiprocessing import Process, Queue
 from time import sleep
 
-from camera.frame_controller import VideoFrameController
 from db.db_lite import TBDatabase, TDBAtomicConnection
 from local_utils.config import Config, load_config
 from local_utils.logger import get_logger, init_logger
@@ -13,6 +12,7 @@ logger = get_logger(__name__)
 config: Config = load_config()
 
 import msg_bot.telegram_bot as t_bot
+from main.telegram_bot import TelegramBotProcess
 
 
 def init_database(config: Config):
@@ -28,16 +28,12 @@ def init_frame_controller(config: Config):
 def handle_signal(processes):
     def signal_handler(sig, frame):
         logger.info("SIGINT received")
-
-        logger.info("Stopping the bot")
-        t_bot.stop_bot()
-        logger.info("Bot stopped")
-
         # Terminate all processes
         for process in processes:
             if process.is_alive():
                 process.terminate()
                 process.join()
+
 
         sys.exit(0)
 
@@ -53,12 +49,16 @@ def check_access(person, camera_id, database: TDBAtomicConnection):
 def main_process(config, notifications_queue: Queue):
     # Initialize resources locally in the process
     database = init_database(config)
+
     frame_controller = init_frame_controller(config)
     frame_controller.start_frame_sources()
 
+    while not frame_controller.sources_setup_complete():
+        logger.info("Waiting for frame sources to be setup")
+        sleep(0.5)
+
     with database() as db:
         while frame_controller.has_alive_sources():
-            sleep(1)
 
             detections = frame_controller.fetch_and_get_frames()
             if len(detections) == 0:
@@ -68,6 +68,7 @@ def main_process(config, notifications_queue: Queue):
                 person, img = person_img
 
                 if check_access(person, camera_id, db):
+                    # has access to camera
                     continue
 
                 logger.critical(f"Person {person} has no access to room {camera_id}")
@@ -77,8 +78,7 @@ def main_process(config, notifications_queue: Queue):
                 camera_name = db.get_camera_name(camera_id)
                 # Send notification through queue instead of direct bot call
                 notifications_queue.put((img, person, camera_name))
-
-    frame_controller.stop_sources()
+        frame_controller.stop_sources()
 
 
 if __name__ == "__main__":
@@ -89,9 +89,8 @@ if __name__ == "__main__":
     notifications_queue = Queue()
 
     # spawn processes
-    telegram_bot = Process(
+    telegram_bot = TelegramBotProcess(config, notifications_queue,
         target=t_bot.start_bot,
-        args=(config.logger_config["level"], notifications_queue),
         daemon=False,
     )
     main_proc = Process(
@@ -101,7 +100,7 @@ if __name__ == "__main__":
     processes = [telegram_bot, main_proc]
 
     telegram_bot.start()
-    sleep(1)
+
     main_proc.start()
 
     handle_signal(processes)

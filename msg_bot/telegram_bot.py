@@ -1,5 +1,6 @@
 import os
 import re
+from threading import Thread
 from typing import Union
 
 import numpy as np
@@ -7,12 +8,9 @@ import telebot
 import telebot.types as types
 from telebot.formatting import format_text, mbold, hcode
 from pathlib import Path
-from logging import DEBUG, INFO
 from random import randint
-from threading import Thread
-from time import sleep
 
-from local_utils.config import config
+import local_utils.config
 from local_utils.logger import get_logger
 from msg_bot.utils import require_auth, empty_answer_callback_query, override_call_message_id_with_from_user_id
 from db.db_lite import TBDatabase, get_database
@@ -23,6 +21,7 @@ import cv2
 '''
 This code is a bit rushed and must, i repeat MUST, be refactored to be at least something apparently good
 '''
+config = local_utils.config.config
 
 bot = telebot.TeleBot(config.telegram_bot_token)
 DB: TBDatabase = get_database(config.db_path, dropdb=config.drop_db)
@@ -468,24 +467,21 @@ def echo_all(message):
         os.path.join('.', 'datasets', pics[randint(1, 4)] + '.jpg')
     ))
 
-def start_bot(logger_level, notifications_queue=None):
-    if notifications_queue:
-        def check_notifications():
-            while True:
-                try:
-                    img, person, camera_name = notifications_queue.get()
-                    send_detection_img(img, person_detected_name=person, access_camera_name=camera_name)
-                except Exception as e:
-                    logger.error(f"Error processing notification: {e}")
-                sleep(0.1)
-        
-        notification_thread = Thread(target=check_notifications, daemon=True)
-        notification_thread.start()
-    
-    bot.polling(logger_level=logger_level, skip_pending=True)
+def start_bot(logger_level, skip_pending:bool):
+    global bot
+    logger.info('Starting bot')
+    bot.polling(skip_pending=skip_pending, logger_level=logger_level)
+
 
 def stop_bot():
     bot.stop_bot()
+
+
+class TelegramBotThread(Thread):
+    def stop(self):
+        global bot
+        bot.stop_bot()
+
 
 if __name__ == '__main__':
     DB = get_database('database.db', dropdb=False)
@@ -494,4 +490,4 @@ if __name__ == '__main__':
         db.add_camera(2, 'camera2')
         db.add_camera(3, 'camera3')
         db.add_camera(4, 'camera4')
-    start_bot(DEBUG)
+    start_bot(0)

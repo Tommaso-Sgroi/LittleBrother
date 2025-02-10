@@ -4,6 +4,7 @@ import yaml
 from pathlib import Path
 from typing import Any, Dict
 from logging import INFO, DEBUG, WARNING, ERROR, CRITICAL
+
 class ConfigException(Exception):
     pass
 

@@ -64,6 +64,7 @@ class VideoFrameController(Thread, Logger):
         self.sources = sources
         self.buffer = VideoFrameController.Buffer()
         self.fifo_queue = fifo_queue
+        self.start = VideoFrameController.Buffer()
 
     def _alive_counter(self):
         dead_counter = 0
@@ -116,10 +117,15 @@ class VideoFrameController(Thread, Logger):
         for source in self.sources:
             self.logger.info(f'starting frame source: {source.id}')
             source.start()
+        self.start.append(True)
 
     def stop_sources(self):
         for source in self.sources: source.terminate()
         for source in self.sources: source.join()
+        self.start.remove(True)
+
+    def sources_setup_complete(self):
+        return self.start.get(flush=False)
 
     def stop(self):
         self.stop_sources()
