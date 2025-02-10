@@ -10,15 +10,16 @@ from camera.video_frame_initializer import QueuedFrameControllerFactory
 from face_recognizer.face_recognizer import FaceRecognizer
 from local_utils.frames import rescale_frame
 from local_utils.view import view
+from motion_detector.motion_detector import MotionDetector
 
 
 class VideoProcessor(QueuedFrameSource):
 
     def __init__(self, id, *,
                  yolo: str,
-                 face_recogniser_threshold = 0.5,
+                 face_recogniser_threshold=0.5,
                  scale_size=100,
-                 batch_size:int= 1,
+                 batch_size: int = 1,
                  fifo_queue: Queue,
                  timeout=0.1,
                  fps=30,
@@ -29,6 +30,7 @@ class VideoProcessor(QueuedFrameSource):
             "cuda" if torch.cuda.is_available()
             else ("mps" if torch.backends.mps.is_available() else "cpu")
         ) if device is None else device
+        self.motion_detector = None
         self.yolo_model_name = yolo
         self.yolo_model = None
         self.face_recognizer = None
@@ -38,6 +40,7 @@ class VideoProcessor(QueuedFrameSource):
         self.view = view
 
     def run(self):
+        self.motion_detector = MotionDetector(detector="mog2", threshold=0.1, min_area=500)
         self.yolo_model = YOLO(self.yolo_model_name)
         self.face_recognizer = FaceRecognizer(threshold=self.face_recogniser_threshold)
         super().run()
@@ -68,8 +71,12 @@ class VideoProcessor(QueuedFrameSource):
         start_time = time.time()
         frame_count = 0
 
-        batch_frames = [rescale_frame(frame, self.scale_size) for frame in frames] # Resize the frame to 50% of its original size
+        batch_frames = [rescale_frame(frame, self.scale_size) for frame in
+                        frames if self.motion_detector(frame)]  # Resize the frame to 50% of its original size
         frame_count += 1
+
+        if len(batch_frames) == 0:
+            return []
 
         # When the batch is full or end-of-video is reached, process the batch.
         results = self.yolo_model(
@@ -80,7 +87,6 @@ class VideoProcessor(QueuedFrameSource):
         if self.view:
             annotated_batch_frames = [result.plot() for result in results]
             self.view_frames(annotated_batch_frames, winname=str(self.id) + ' yolo')
-
 
         index = 0
         for result, frame in zip(results, batch_frames):
@@ -104,7 +110,6 @@ class VideoProcessor(QueuedFrameSource):
                     else:
                         detections.append((self.id, None, frame))
             index += 1
-
 
         total_time = time.time() - start_time
         average_fps = frame_count / total_time if total_time > 0 else 0
@@ -174,9 +179,9 @@ class VideoProcessorFrameControllerFactory(QueuedFrameControllerFactory):
 
 
 def initialize_frame_controller(sources: list[Union[str, int]],
-                                yolo_model_name:str,
-                                max_queue_size:int=None,
-                                fps:int=15,
+                                yolo_model_name: str,
+                                max_queue_size: int = None,
+                                fps: int = 15,
                                 **kwargs) -> VideoFrameController:
     """
     Initializes the camera resources and returns the video frame initializer.
@@ -208,11 +213,9 @@ def initialize_frame_controller(sources: list[Union[str, int]],
                 A newly created `VideoFrameController` containing all QueuedFrameSource.
     """
     vpfcf = VideoProcessorFrameControllerFactory()
-    controller = vpfcf.initializer( sources,
-                                    yolo=yolo_model_name,
-                                    max_queue_size=max_queue_size,
-                                    fps=fps,
-                                    **kwargs)
+    controller = vpfcf.initializer(sources,
+                                   yolo=yolo_model_name,
+                                   max_queue_size=max_queue_size,
+                                   fps=fps,
+                                   **kwargs)
     return controller
-
-
