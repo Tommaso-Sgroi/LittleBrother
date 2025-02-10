@@ -60,7 +60,6 @@ class VideoProcessor(QueuedFrameSource):
         detection = self.process_video_frames(frames)
         # detection: list[Union[int, str], list[str, tuple[str, str]]]
         if len(detection) > 0:
-            detection.insert(0, self.id)
             self.queue.put([detection], timeout=self.timeout)
 
     def process_video_frames(self, frames) -> list[Union[str, tuple[str, str]]]:
@@ -72,12 +71,12 @@ class VideoProcessor(QueuedFrameSource):
         batch_frames = [rescale_frame(frame, self.scale_size) for frame in frames] # Resize the frame to 50% of its original size
         frame_count += 1
 
-        detections = []
         # When the batch is full or end-of-video is reached, process the batch.
         results = self.yolo_model(
             batch_frames, classes=[0], device=self.device, verbose=False
         )
 
+        detections = []
         if self.view:
             annotated_batch_frames = [result.plot() for result in results]
             self.view_frames(annotated_batch_frames, winname=str(self.id) + ' yolo')
@@ -91,15 +90,19 @@ class VideoProcessor(QueuedFrameSource):
                 if x2 - x1 < 20 or y2 - y1 < 20: continue
 
                 detected_person_image = frame[y1:y2, x1:x2]
+
                 faces = self.face_recognizer.recognize_faces(detected_person_image)
+                if len(faces) == 0:
+                    detections.append((self.id, None, frame))
+
                 for detected_face in faces:
                     if detected_face["label"] is not None:
-                        detections.append((detected_face["label"], frames[index]))
+                        detections.append((self.id, detected_face["label"], frame))
                         self.logger.debug(
                             f"[{self.id}] Detected face: {detected_face['label']} with confidence {detected_face['confidence']}"
                         )
                     else:
-                        detections.append((None, frames[index]))
+                        detections.append((self.id, None, frame))
             index += 1
 
 

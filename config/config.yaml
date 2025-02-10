@@ -2,13 +2,13 @@
 
 database:
   path: "database.db"
-  drop_db: true
+  drop_db: false
 
 files:
   basedir_enroll_path: "./registered_faces"
 
 frame_controller:
-  sources: [[0, 'webcam']]
+  sources: [[0, 'camera0']]
   device: "cpu"
   yolo_model_name: "yolo11n.pt"
   max_queue_size: null
@@ -16,7 +16,7 @@ frame_controller:
   timeout: 0.1
   scale_size: 100
   face_recogniser_threshold: 0.5
-  view: false
+  view: true
 
 fake_camera_mode: false # fakes video to cameras, useful for testing and debugging while inserting information into the database
 

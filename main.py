@@ -6,6 +6,7 @@ from time import sleep
 from db.db_lite import TBDatabase, TDBAtomicConnection
 from local_utils.config import Config, load_config
 from local_utils.logger import get_logger, init_logger
+from local_utils.view import view
 from main.video_processor import initialize_frame_controller
 import signal
 
@@ -67,20 +68,20 @@ def main(database, frame_controller):
             if len(detections) == 0:
                 continue
 
-            for camera_id, person_img in detections:
-                person, img = person_img
+            for detection in detections:
+                for camera_id, person, img in detection:
+                    # view(img, winname='running')
+                    if check_access(person, camera_id, db):
+                        # has access to camera
+                        continue
 
-                if check_access(person, camera_id, db):
-                    # has access to camera
-                    continue
+                    logger.critical(f"Person {person} has no access to room {camera_id}")
+                    if person is None:
+                        person = "Unknown"
 
-                logger.critical(f"Person {person} has no access to room {camera_id}")
-                if person is None:
-                    person = "Unknown"
-
-                camera_name = db.get_camera_name(camera_id)
-                # Send notification through queue instead of direct bot call
-                notifications_queue.put((img, person, camera_name))
+                    camera_name = db.get_camera_name(camera_id)
+                    # Send notification through queue instead of direct bot call
+                    t_bot.send_detection_img(img, person_detected_name=person, access_camera_name=camera_name)
         frame_controller.stop_sources()
 
 
@@ -98,7 +99,7 @@ if __name__ == "__main__":
     main_thread = Thread(target=main, args=(database, frame_controller), daemon=False)
 
     telegram_bot.start()
-    sleep(1)
+    sleep(5)
     main_thread.start()
 
 
