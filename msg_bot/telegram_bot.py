@@ -9,6 +9,7 @@ import telebot.types as types
 from telebot.formatting import format_text, mbold, hcode
 from pathlib import Path
 from random import randint
+from time import time  # NEW: Import time for cooldown check
 
 import local_utils.config
 from local_utils.logger import get_logger
@@ -18,6 +19,7 @@ from face_recognizer.face_recognizer import FaceRecognizer
 from io import BytesIO
 from PIL import Image
 import cv2
+
 '''
 This code is a bit rushed and must, i repeat MUST, be refactored to be at least something apparently good
 '''
@@ -30,6 +32,8 @@ bot = telebot.TeleBot(config.telegram_bot_token)
 DB: TBDatabase = get_database(config.db_path, dropdb=config.drop_db)
 
 logger = get_logger(__name__)
+
+notification_tracker = {}
 
 auth_token = config.auth_token
 basedir_enroll_path = config.basedir_enroll_path
@@ -69,6 +73,7 @@ class CommandName:
 
         return markup
 
+
 def filter_callback_query(call: types.CallbackQuery, query_type: str) -> bool:
     data = CommandName.decompose(call.data)
     if query_type == data[0]:
@@ -100,10 +105,27 @@ def abort_callback_query(call: types.CallbackQuery):
     return
 
 
-def send_detection_img(img: Union[Image.Image, np.ndarray], *, person_detected_name: str='Unknown', access_camera_name: str='Unknown camera'):
+def send_detection_img(img: Union[Image.Image, np.ndarray], *, person_detected_name: str = 'Unknown',
+                       access_camera_name: str = 'Unknown camera'):
     """
-    When a violation is detected we must notify all registered users
+    When a violation is detected we must notify all registered users.
     """
+    global notification_tracker
+    now = time()
+    tracker = notification_tracker.get(access_camera_name)
+    if tracker:
+        window_start, count = tracker
+        if now - window_start < 60:
+            if count >= 2:
+                logger.info("Cooldown active for camera: %s", access_camera_name)
+                return  # Skip notification due to cooldown
+            else:
+                notification_tracker[access_camera_name] = (window_start, count + 1)
+        else:
+            notification_tracker[access_camera_name] = (now, 1)
+    else:
+        notification_tracker[access_camera_name] = (now, 1)
+
     with DB() as db:
         users = db.get_users()
 
@@ -126,7 +148,7 @@ def send_detection_img(img: Union[Image.Image, np.ndarray], *, person_detected_n
         buf.seek(0)
         bot.send_photo(chat_id=user_id, photo=buf, caption=caption)
 
-    global logger
+    # global logger
     logger.info("All users notified of the violation by %s in camera %s", person_detected_name, access_camera_name)
 
 
@@ -173,12 +195,14 @@ def auth_user(message):
     bot.send_message(message.from_user.id, "send the authentication token chosen by you or provided by the system")
     bot.register_next_step_handler(message, authenticate_user)
 
+
 @bot.message_handler(commands=["logout"])
 @require_auth(db=DB, bot=bot)
 def logout(message):
     with DB() as db:
         db.delete_user(message.from_user.id)
         bot.send_message(message.chat.id, "Logged out")
+
 
 @bot.message_handler(commands=['list'])
 @require_auth(bot=bot, db=DB)
@@ -198,7 +222,6 @@ def list_people(message):
 
 
 # ------------------- CALLBACKS QUERIES -------------------
-
 
 
 @bot.callback_query_handler(func=lambda call: filter_callback_query(call, CommandName.BACK_TO_LIST_PEOPLE))
@@ -470,7 +493,8 @@ def echo_all(message):
         os.path.join('.', 'datasets', pics[randint(1, 4)] + '.jpg')
     ))
 
-def start_bot(logger_level, skip_pending:bool):
+
+def start_bot(logger_level, skip_pending: bool):
     global bot
     logger.info('Starting bot')
     bot.polling(skip_pending=skip_pending, logger_level=logger_level)
