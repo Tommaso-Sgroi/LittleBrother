@@ -9,6 +9,8 @@ from telebot.formatting import format_text, mbold, hcode
 from pathlib import Path
 from logging import DEBUG, INFO
 from random import randint
+from threading import Thread
+from time import sleep
 
 from local_utils.config import config
 from local_utils.logger import get_logger
@@ -466,7 +468,20 @@ def echo_all(message):
         os.path.join('.', 'datasets', pics[randint(1, 4)] + '.jpg')
     ))
 
-def start_bot(logger_level):
+def start_bot(logger_level, notifications_queue=None):
+    if notifications_queue:
+        def check_notifications():
+            while True:
+                try:
+                    img, person, camera_name = notifications_queue.get()
+                    send_detection_img(img, person_detected_name=person, access_camera_name=camera_name)
+                except Exception as e:
+                    logger.error(f"Error processing notification: {e}")
+                sleep(0.1)
+        
+        notification_thread = Thread(target=check_notifications, daemon=True)
+        notification_thread.start()
+    
     bot.polling(logger_level=logger_level, skip_pending=True)
 
 def stop_bot():
