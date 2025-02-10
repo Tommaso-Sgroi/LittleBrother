@@ -61,7 +61,7 @@ class Config:
 
         if not self.fake_camera_mode:
             for s in self.frame_controller_config['sources']:
-                if not isinstance(s[1], int):
+                if not isinstance(s[0], int):
                     raise ConfigException("sources must be a list of integers, maybe you would like to use fake_camera_mode")
 
         # Sezione logger
