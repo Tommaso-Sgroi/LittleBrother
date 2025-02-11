@@ -2,7 +2,7 @@
 
 database:
   path: "database.db"
-  drop_db: true
+  drop_db: false
 
 files:
   basedir_enroll_path: "./registered_faces"

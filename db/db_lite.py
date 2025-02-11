@@ -77,8 +77,10 @@ class TDBAtomicConnection(l.Logger):
         remove_cameras = db_camera_ids - cameras_ids
         for camera_id in remove_cameras:
             self.delete_camera(camera_id)
-
-        self.add_enrolled_person(UNKNOWN_SPECIAL_USER)
+        try:
+            self.add_enrolled_person(UNKNOWN_SPECIAL_USER)
+        except Exception as e:
+            pass
         return
 
     def drop_db(self):
@@ -363,6 +365,7 @@ class TDBAtomicConnection(l.Logger):
         cursor = self.get_cursor()
         try:
             cursor.execute("DELETE FROM Cameras WHERE camera_id=?", (camera_id,))
+            cursor.execute("DELETE FROM AccessList WHERE camera_id=?", (camera_id,)) # because was not deleted too apparently
         except Exception as e:
             self.logger.error("Error during camera deletion: %s", e)
             raise_error(e, "Error during camera deletion: %s".format(camera_id))
