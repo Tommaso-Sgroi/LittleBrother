@@ -1,7 +1,7 @@
 from threading import Thread
 from time import sleep
 
-from db.db_lite import TBDatabase, TDBAtomicConnection
+from db.db_lite import TBDatabase, TDBAtomicConnection, UNKNOWN_SPECIAL_USER
 from local_utils.config import Config, load_config
 from local_utils.logger import get_logger, init_logger
 from camera.video_processor import initialize_frame_controller
@@ -58,6 +58,7 @@ def process_detections(database, frame_controller):
                 continue
             for detection in detections:
                 for camera_id, person, img in detection:
+                    person = person or UNKNOWN_SPECIAL_USER
                     if check_access(person, camera_id, db):
                         continue
                     logger.critical(f"Person %s has no access to room %s", person or 'Unknown', camera_id)

@@ -4,6 +4,8 @@ import local_utils.logger as l
 def get_database(db_path, *, dropdb = False):
     return TBDatabase(db_path, dropdb)
 
+UNKNOWN_SPECIAL_USER = u'Unknown\U00002753'
+
 class TBDatabase(l.Logger):
     """
     Classe per la gestione di un database SQLite3 per il bot Telegram.
@@ -73,6 +75,7 @@ class TDBAtomicConnection(l.Logger):
         for camera_id in remove_cameras:
             self.delete_camera(camera_id)
 
+        self.add_enrolled_person(UNKNOWN_SPECIAL_USER)
         return
 
     def drop_db(self):
@@ -122,7 +125,7 @@ class TDBAtomicConnection(l.Logger):
         -- to identify the user in the system
             user_name TEXT,
             camera_id INTEGER , 
-            listed VARCHAR(1) NOT NULL CHECK(listed IN ('b','w')) DEFAULT 'b',
+            listed VARCHAR(1) NOT NULL CHECK(listed IN ('b','w', 'f')) DEFAULT 'b', -- f means free for all
             FOREIGN KEY (camera_id) REFERENCES Cameras(camera_id) ON DELETE CASCADE,
             -- FOREIGN KEY (user_name) REFERENCES EnrolledPeople(user_name) ON DELETE CASCADE,
             PRIMARY KEY (user_name, camera_id)
