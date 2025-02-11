@@ -141,14 +141,7 @@ class FaceRecognizer(Logger):
         embedding = self.resnet(face_tensor)
         return embedding.to("cpu")
 
-    def recognize_faces(self, images) -> list[dict]:
-        """
-        Recognize faces in an image or a batch of images.
-        Args:
-            images: A single PIL Image or a list of PIL Images
-        Returns:
-            A list of results for each face in the input image(s)
-        """
+    def get_faces(self, images) -> list:
         faces_list = self.mtcnn(images)
 
         # Filter out empty results
@@ -166,6 +159,19 @@ class FaceRecognizer(Logger):
         faces_list = [f for f in faces_list if f is not None]
         if not faces_list:
             self.logger.info("No valid faces found in the input")
+            return []
+        return faces_list
+
+    def recognize_faces(self, images) -> list[dict]:
+        """
+        Recognize faces in an image or a batch of images.
+        Args:
+            images: A single PIL Image or a list of PIL Images
+        Returns:
+            A list of results for each face in the input image(s)
+        """
+        faces_list = self.get_faces(images)
+        if len(faces_list) == 0:
             return []
 
         all_results = []

@@ -398,8 +398,10 @@ def enroll_user(message, override_enrollment=False, enroll_person_name=''):
                                    override=override_enrollment)
 
 
-# def enroll_photo_from_user(message, enroll_name:str, scope:str, camera_id:int, retries=3):
 def enroll_photo_from_user(message, enroll_name: str, override=False, retries=2):
+    if not authenticate_user(message, DB, bot):
+        return
+
     fr = FaceRecognizer()
     # it's ok to instantiate everytime the face recognizer, since we are calling it few times in
     # the scenario, and purpose, of this bot
@@ -423,6 +425,12 @@ def enroll_photo_from_user(message, enroll_name: str, override=False, retries=2)
     # enroll faces
     try:
         bot.send_message(message.chat.id, 'Enrolling face, could take a while...')
+        n_faces = fr.get_faces(image)
+        if not n_faces:
+            raise Exception('no face detected')
+        elif n_faces[0].shape[0] > 1:
+            raise Exception('more than one face detected')
+
         fr.enroll_face(image, enroll_name)
         # update the db with the new person
         if not override:
@@ -430,7 +438,7 @@ def enroll_photo_from_user(message, enroll_name: str, override=False, retries=2)
                 db.add_enrolled_person(enroll_name)
         bot.send_message(message.chat.id, f'{enroll_name} enrolled into the system')
     except Exception as e:
-        bot.send_message(message.chat.id, f'Invalid image {str(e)}, try again')
+        bot.send_message(message.chat.id, f'Error during enrollment: {str(e)}\nRetry!')
         # bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, scope=scope, camera_id=camera_id, retries=retries-1)
         bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, retries=retries - 1)
     return
