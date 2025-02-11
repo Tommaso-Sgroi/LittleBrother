@@ -1,7 +1,7 @@
 [project]
-name = "computervision"
-version = "0.1.0"
-description = "Add your description here"
+name = "LittleBrother"
+version = "1.0.0"
+description = "Smart Home Security Camera"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

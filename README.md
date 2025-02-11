@@ -19,8 +19,8 @@ This combination of features allows for a robust and informative security system
 ### 2. Clone the Repository
 
 ```bash
-git clone <your-repository-url>
-cd <your-repository-directory>
+git clone https://github.com/Tommaso-Sgroi/LittleBrother
+cd LittleBrother
 ```
 
 ### 3. Install Dependencies
@@ -108,3 +108,6 @@ Available Commands:
 * **Camera not working**: Verify that the camera index (in `config.yaml`) is correct. You might need to experiment with different indices (0, 1, 2, etc.) to find the right one. Use fake_camera_mode and a video file to test if you're unsure about camera indices.
 * **Dependency issues**: If you encounter problems after modifying dependencies, try removing the `.venv` directory and running `uv sync` again.
 * **Errors during execution**: Check the console output and the log file (if enabled) for error messages. These messages can provide clues about the cause of the problem.
+
+## Additional Notes
+Due European AI Act & GDPR compliance's, you may not use this software for any surveillance purposes. This project is intended for educational and non-commercial use only. Any different use is at your own risk.
