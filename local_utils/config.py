@@ -1,12 +1,110 @@
 import os.path
+from abc import abstractmethod, ABC
 
 import yaml
 from pathlib import Path
 from typing import Any, Dict
 from logging import INFO, DEBUG, WARNING, ERROR, CRITICAL
 
+
+
 class ConfigException(Exception):
     pass
+
+class SourceConfig(ABC):
+    @abstractmethod
+    def to_dict(self) -> dict:
+        pass
+
+class FrameSourceConfig(SourceConfig):
+    def __init__(self, id, source):
+        self.source = source
+        self.id = id
+
+    def to_dict(self) -> dict:
+        """
+        Returns a dict suitable for **kwargs unpacking.
+        """
+        return {
+            "id": self.id,
+            "source": self.source
+        }
+
+class QueuedFrameSourceConfig(FrameSourceConfig):
+    def __init__(self, id, source, timeout:float, fps:int):
+        super().__init__(id, source)
+        self.timeout = timeout
+        self.fps = fps
+        # self.source_name = source_name
+
+    def to_dict(self) -> dict:
+        """
+        Returns a dict suitable for **kwargs unpacking.
+        """
+        d = super().to_dict()
+        d.update({
+            "timeout": self.timeout,
+            "fps": self.fps
+        })
+        return d
+
+
+class VideoFrameSourceConfig(QueuedFrameSourceConfig):
+    """
+    Represents one camera/video source configuration (fields like 'source', 'name', etc.)
+    """
+    def __init__(
+        self,
+        id,
+        source,
+        name,
+        device="cpu",
+        yolo="yolo11n.pt",
+        fps=30,
+        timeout=0.1,
+        scale_size=100,
+        face_recogniser_threshold=0.5,
+        motion_detector_threshold=0.5,
+        motion_detector_min_area=500,
+        motion_detector="mog2",
+        view=True,
+    ):
+        super().__init__(id, source, timeout, fps)
+        self.device = device
+        self.name = name
+        self.yolo = yolo
+        self.scale_size = scale_size
+        self.face_recogniser_threshold = face_recogniser_threshold
+        self.motion_detector_threshold = motion_detector_threshold
+        self.motion_detector_min_area = motion_detector_min_area
+        self.motion_detector = motion_detector
+        self.view = view
+
+    def to_dict(self) -> dict:
+        """
+        Returns a dict suitable for **kwargs unpacking.
+        """
+        d = super().to_dict()
+        d.update({
+            "name": self.name,
+            "device": self.device,
+            "yolo": self.yolo,
+            "scale_size": self.scale_size,
+            "face_recogniser_threshold": self.face_recogniser_threshold,
+            "motion_detector_threshold": self.motion_detector_threshold,
+            "motion_detector_min_area": self.motion_detector_min_area,
+            "motion_detector": self.motion_detector,
+            "view": self.view,
+        })
+        return d
+
+
+class VideoFrameControllerConfig:
+    def __init__(self, max_queue_size, sources: list[QueuedFrameSourceConfig]):
+        self.sources = sources
+        self.max_queue_size = max_queue_size
+
+
 
 class Config:
     """
@@ -39,33 +137,19 @@ class Config:
         os.makedirs(self.basedir_enroll_path, exist_ok=True)
 
         # Sezione frame_controller
-        fc_cfg = config_dict.get("frame_controller", {})
-        # Lo memorizziamo in un dict, così possiamo fare l'unpack per la funzione
-        self.frame_controller_config = {
-            "sources": fc_cfg.get("sources", ConfigException("sources is not set, they can be a list of integers or strings where integers are camera indexes and strings are paths to video files")),
-            "yolo_model_name": fc_cfg.get("yolo_model_name", ConfigException("yolo_model_name is not set, choose one of the available models")),
-            "max_queue_size": fc_cfg.get("max_queue_size", None),
-            "fps": fc_cfg.get("fps", 30),
-            "timeout": fc_cfg.get("timeout", 0.1),
-            "scale_size": fc_cfg.get("scale_size", 100),
-            "view": fc_cfg.get("view", False),
-            "device": fc_cfg.get("device", "cpu"),
-            "face_recogniser_threshold": fc_cfg.get("face_recogniser_threshold", 0.5),
-            "motion_detector_threshold": fc_cfg.get("motion_detector_threshold", 0.5),
-            "motion_detector_min_area" : fc_cfg.get("motion_detector_min_area", 500),
-            "motion_detector": fc_cfg.get("motion_detector", "mog2"),
-        }
+        fc_cfg = config_dict.get("frame_controller", None)
+        if fc_cfg is None:
+            raise ConfigException("No frame_controller sources configured")
 
-        self.fake_camera_mode = config_dict.get("fake_camera_mode", False)
+        frame_controllers_config = []
+        for frame_crt in fc_cfg['sources']:
+            if not isinstance(frame_crt, dict):
+                raise ConfigException("Invalid frame_controller source configuration")
+            source_cfg = VideoFrameSourceConfig(**frame_crt)
+            frame_controllers_config.append(source_cfg)
+        max_queue_size = fc_cfg.get("max_queue_size", None)
 
-        for k, v in self.frame_controller_config.items():
-            if isinstance(v, ConfigException):
-                raise v
-
-        if not self.fake_camera_mode:
-            for s in self.frame_controller_config['sources']:
-                if not isinstance(s[0], int):
-                    raise ConfigException("sources must be a list of integers, maybe you would like to use fake_camera_mode")
+        self.video_frame_controller = VideoFrameControllerConfig(max_queue_size, frame_controllers_config)
 
         # Sezione logger
         logger_cfg = config_dict.get("logger", {})
@@ -91,15 +175,46 @@ class Config:
         elif level == "CRITICAL":
             self.logger_config["level"] = CRITICAL
 
-
-
-
     def __str__(self):
-        frame_controller_config_str = "\n".join([f"{k}={v}" for k, v in self.frame_controller_config.items()])
-        return '-'*10 + "config" + '-' * 10 + '\n' +\
-                 f"Config(\ntelegram_bot_token={self.telegram_bot_token[:len(self.telegram_bot_token)//2]}\nauth_token={'*'*len(self.auth_token)}\ndb_path={self.db_path}\ndrop_db={self.drop_db}\nbasedir_enroll_path={self.basedir_enroll_path}\n"+\
-            f"frame_controller_config={frame_controller_config_str}\n)\n" + \
-            '-' * 10 + "config" + '-' * 10
+        """
+        Pretty-print the Config object, showing partially masked tokens,
+        DB path, frame controllers, and logger config.
+        """
+        # Partially mask telegram bot token (show half)
+        if self.telegram_bot_token:
+            half_len = len(self.telegram_bot_token) // 2
+            masked_bot_token = self.telegram_bot_token[:half_len] + "*" * (len(self.telegram_bot_token) - half_len)
+        else:
+            masked_bot_token = "None"
+
+        # Completely mask auth_token
+        masked_auth_token = "*" * len(self.auth_token) if self.auth_token else "None"
+
+        # Build a string for each frame controller source
+        frame_controller_config_str = f"{self.video_frame_controller.max_queue_size=}\n"
+        for i, fc_source in enumerate(self.video_frame_controller.sources, start=1):
+            frame_controller_config_str += f"  [Frame Source {i}]\n"
+            # Convert the FrameControllerSource to dict and list out fields
+            for key, val in fc_source.to_dict().items():
+                frame_controller_config_str += f"    {key}={val}\n"
+            frame_controller_config_str += "\n"
+
+        logger_level = self.logger_config.get("level", "N/A")
+        logger_format = self.logger_config.get("format", "N/A")
+
+        return (
+            f"{'-' * 10} Config {'-' * 10}\n" +
+            f"Telegram Bot Token: {masked_bot_token}\n" +
+            f"Auth Token: {masked_auth_token}\n" +
+            f"DB Path: {self.db_path}\n" +
+            f"Drop DB: {self.drop_db}\n" +
+            f"Enroll Path: {self.basedir_enroll_path}\n" +
+            f"Logger Level: {logger_level}\n" +
+            f"Logger Format: {logger_format}\n" +
+            f"\nFrame Controllers:\n{frame_controller_config_str}" +
+            f"{'-' * 10} End Config {'-' * 10}\n"
+        )
+
 
 config: Config = None
 

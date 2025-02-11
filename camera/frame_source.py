@@ -11,10 +11,10 @@ class FrameSource(ABC, Process, Logger):
     The stream must implement the "read" and "isOpened" method
     """
 
-    def __init__(self, id, **kwargs):
+    def __init__(self, id, source, **kwargs):
         Process.__init__(self, **kwargs)
         Logger.__init__(self, name=f"{self.__class__.__name__}-{id}")
-
+        self.source = source
         self.id = id
         self.buffer = []
         self.stream = None
@@ -41,12 +41,11 @@ class FrameSource(ABC, Process, Logger):
         pass
 
 class QueuedFrameSource(FrameSource, ABC):
-    def __init__(self, id, fifo_queue: Queue, timeout:float, fps:int, **kwargs):
-        FrameSource.__init__(self, id, **kwargs)
+    def __init__(self, id, source, fifo_queue: Queue, timeout:float, fps:int, **kwargs):
+        FrameSource.__init__(self, id, source,  **kwargs)
         self.queue = fifo_queue
         self.timeout = timeout
         self.fps = fps
-        # self.source_name = source_name
 
     @rate_limit
     def read(self):
@@ -60,7 +59,7 @@ class QueuedFrameSource(FrameSource, ABC):
         self.queue.put([(self.id, frame)], timeout=self.timeout)
 
     def create_stream(self):
-        self.stream = cv.VideoCapture(self.id)
+        self.stream = cv.VideoCapture(self.source)
 
     def next(self):
         ret, frame = self.read()

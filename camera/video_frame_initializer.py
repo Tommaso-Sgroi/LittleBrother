@@ -1,26 +1,22 @@
-import os.path
 from abc import ABC, abstractmethod
 from multiprocessing import Queue
-from typing import Union, Any
-
-from .camera_source import CameraSource
+from local_utils.config import VideoFrameControllerConfig, QueuedFrameSourceConfig, FrameSourceConfig
 from .frame_controller import VideoFrameController
-from .frame_source import FrameSource
-from .video_source import VideoSource
+from .frame_source import FrameSource, QueuedFrameSource
 
 
 class AbstractFrameControllerFactory(ABC):
 
 
     @abstractmethod
-    def build_source(self, source: Union[Any], **kwargs) -> FrameSource:
+    def build_source(self, source: FrameSourceConfig, **kwargs) -> FrameSource:
         pass
 
     @abstractmethod
-    def initializer(self, sources: list[Union[str,int]], max_queue_size=None, fps=15, **kwargs) -> VideoFrameController:
+    def initializer(self, config:VideoFrameControllerConfig) -> VideoFrameController:
         pass
 
-    def _instantiate_source(self, sources, **kwargs) -> list[FrameSource]:
+    def _instantiate_source(self, sources: list[FrameSourceConfig], **kwargs) -> list[FrameSource]:
         sources_built = []
         for source in sources:
             source = self.build_source(source, **kwargs)
@@ -29,45 +25,22 @@ class AbstractFrameControllerFactory(ABC):
 
 class QueuedFrameControllerFactory(AbstractFrameControllerFactory):
 
-    def initializer(self, sources: list[Union[str,int]], max_queue_size=None, fps=15, timeout=0.1, **kwargs) -> VideoFrameController:
+    def initializer(self, config: VideoFrameControllerConfig) -> VideoFrameController:
         """
-        Creates and configures a video frame controller along with its associated video sources.
-
-        This function:
-          1. Optionally calculates a maximum queue size based on the number of video paths and FPS.
-          2. Initializes a multiprocessing-safe queue to buffer frames from multiple video sources.
-          3. Creates a `VideoSource` instance for each video path, assigning each a unique ID based on the file name.
-          4. Wraps all created sources in a `VideoFrameController`, which coordinates the fetching and handling of frames.
-
-        Args:
-            sources (list):
-                A list of file paths to the videos that will be processed.
-            max_queue_size (int, optional):
-                The maximum number of items the frame queue can hold.
-                If not provided, a default is computed as `len(video_paths) * fps + 1`.
-            timeout (float, optional):
-                The timeout (in seconds) for queue operations when putting frames. Defaults to 0.1.
-            fps (int, optional):
-                The desired frames per second for reading from each video source. Defaults to 15.
-
-        Returns:
-            VideoFrameController:
-                A controller object that manages all `VideoSource` instances and coordinates frame retrieval.
+        Initialize a VideoFrameController with the given configuration.
         """
-        if max_queue_size is None:
-            max_queue_size = len(sources) * fps + 1
+        max_queue_size = config.max_queue_size
+        if config.max_queue_size is None:
+            mean_fps = sum([x.fps for x in config.sources]) // len(config.sources)
+            max_queue_size = mean_fps + 1
 
         fifo_queue = Queue(maxsize=max_queue_size)
-        frame_sources = self._instantiate_source(sources, fps=fps, fifo_queue=fifo_queue, **kwargs)
+
+        frame_sources = self._instantiate_source(config.sources, fifo_queue=fifo_queue)
 
         frame_controller = VideoFrameController(frame_sources, fifo_queue=fifo_queue)
         return frame_controller
 
 
-    def build_source(self, source: Union[str, int], **kwargs) -> FrameSource:
-        if isinstance(source, int):
-            return CameraSource(id=source, **kwargs)
-        elif os.path.isfile(source):
-            return VideoSource(id=source, **kwargs)
-        else:
-            raise ValueError(f"Invalid source path: {source}")
+    def build_source(self, source: QueuedFrameSourceConfig, **kwargs) -> FrameSource:
+        return QueuedFrameSource(source.to_dict(), **kwargs)

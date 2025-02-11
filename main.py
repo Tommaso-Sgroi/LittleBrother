@@ -15,18 +15,7 @@ import msg_bot.telegram_bot as t_bot
 def init_database(config: Config):
     db = TBDatabase(config.db_path, drop_db=config.drop_db)
 
-    cameras_names = config.frame_controller_config.get("sources")
-    if config.fake_camera_mode:
-        used_ids = {
-            c for c in cameras_names
-            if isinstance(c, int) and c > 0
-        }
-
-        max_id = max(used_ids) if len(used_ids) > 0 else 0
-        for i in range(len(cameras_names)):
-            cameras_names[i][0] = max_id
-            cameras_names[i][1] = f"FakeCamera-{max_id}"
-            max_id += 1
+    cameras_names = [(vfc.id, vfc.name) for vfc in config.video_frame_controller.sources]
 
     with db() as db_conn:
         for camera_id, camera_name in cameras_names:
@@ -35,10 +24,9 @@ def init_database(config: Config):
 
 
 def init_frame_controller(config: Config):
-    conf = config.frame_controller_config.copy()
-    # remove all second elements of the tuple
-    conf["sources"] = [x[0] for x in conf["sources"]]
-    frame_controller = initialize_frame_controller(**conf)
+    # conf = config.video_frame_controller.sources.copy()
+    # # remove all second elements of the tuple
+    frame_controller = initialize_frame_controller(config.video_frame_controller)
     return frame_controller
 
 

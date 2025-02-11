@@ -7,6 +7,7 @@ from camera.frame_controller import VideoFrameController
 from camera.frame_source import QueuedFrameSource, FrameSource
 from camera.video_frame_initializer import QueuedFrameControllerFactory
 from face_recognizer.face_recognizer import FaceRecognizer
+from local_utils.config import VideoFrameControllerConfig, VideoFrameSourceConfig
 from local_utils.frames import rescale_frame
 from local_utils.view import view
 from motion_detector.motion_detector import MotionDetector
@@ -15,6 +16,8 @@ from motion_detector.motion_detector import MotionDetector
 class VideoProcessor(QueuedFrameSource):
 
     def __init__(self, id, *,
+                 source: Union[int, str],
+                 name: str = None,
                  yolo: str,
                  face_recogniser_threshold=0.5,
                  motion_detector_threshold= 0.5,
@@ -26,8 +29,11 @@ class VideoProcessor(QueuedFrameSource):
                  timeout=0.1,
                  fps=30,
                  device=None,
-                 view=False):
-        super().__init__(id, fifo_queue, timeout, fps, daemon=False)
+                 view: bool=False
+                 ):
+        super().__init__(id, source, fifo_queue, timeout, fps, daemon=False)
+        self.name = name if name is not None else f"VideoProcessor-{id}"
+        self.source = source
         self.device = (
             "cuda" if torch.cuda.is_available()
             else ("mps" if torch.backends.mps.is_available() else "cpu")
@@ -125,106 +131,21 @@ class VideoProcessorFrameControllerFactory(QueuedFrameControllerFactory):
     instances of `VideoProcessor` for either a camera device (int) or a video file (str).
     """
 
-    def initializer(self, sources: list[Union[str, int]], max_queue_size=None, fps=15,
-                    **kwargs) -> VideoFrameController:
-        """
-        Build a `VideoProcessor` instance for the given source.
+    def initializer(self, config: VideoFrameControllerConfig) -> VideoFrameController:
+        return super().initializer(config)
 
-        This method expects `source` to be either an integer representing
-        the ID of a camera device or a string representing the path to a
-        video file. Additional keyword arguments (e.g., YOLO model, threshold,
-        etc.) are forwarded to the `VideoProcessor` constructor.
-
-        Args:
-            sources (Union[str, int]):
-                - If `int`, the camera device index from which to read frames.
-                - If `str`, a path to a video file on the filesystem.
-            max_queue_size `int`: Maximum number of frames to buffer in the queue (per source).
-            fps `int`: Desired frames per second for reading from each source.
-
-            **kwargs:
-                Additional parameters that are passed directly to the
-                `VideoProcessor` constructor. Common options include:
-                - yolo (str): Path or identifier of the YOLO model.
-
-                [optional]:
-            **kwargs:
-                Additional parameters that are passed directly to the
-                `VideoProcessor` constructor. Common options include:
-                - id (int): Unique identifier for the source, it is the path of a video stream or an integer for a camera stream, used by opencv.VideoStream.
-                - yolo (str): Path or identifier of the YOLO model.
-
-                [optional]:
-                - face_recogniser_threshold (float): Threshold for face recognition, defaults to 0.5.
-                - scale_size (int): Desired scale size for processing (default, 100 which means 'no scale', alias: 100% of the image).
-                - batch_size (int): Number of frames to batch process, defaults to 1.
-                - timeout (float): Timeout in seconds for queue operations, defaults to 0.1, in FrameSource raise queue.Full and skip the frame, in FrameController raise queue.Empty.
-                - fps (int): Desired frames per second, defaults to 30.
-                - device (str): Hardware device to run processing on (default device is cuda if available, mps if available, else cpu).
-                - view (bool): If True, it shows the captured frames and yolo's annotated frames.
-                - face_recogniser_threshold: 0.5 (default) - threshold for face recognition.
-                - motion_detector_threshold: 0.5 (default) - threshold for motion detection.
-                - motion_detector_min_area: 500 (default) - minimum area in pixel for motion detection.
-                - motion_detector: "mog2" (default) - motion detector algorithm to use, mog2 or opticalFlow
-        Returns:
-            FrameSource:
-                A newly created `VideoProcessor` instance that inherits from `QueuedFrameSource`.
-
-        Raises:
-            ValueError:
-                If `source` is neither an integer nor a string.
-        """
-        return super().initializer(sources, max_queue_size, fps, **kwargs)
-
-    def build_source(self, source: Union[str, int], **kwargs) -> FrameSource:
-        if not isinstance(source, int) and not isinstance(source, str):
+    def build_source(self, source:VideoFrameSourceConfig, **kwargs) -> FrameSource:
+        if not isinstance(source.source, int) and not isinstance(source.source, str):
             raise ValueError(f"Invalid source type: {type(source)}")
+        args = source.to_dict()
+        return VideoProcessor(**args, **kwargs)
 
-        return VideoProcessor(source, **kwargs)
 
-
-def initialize_frame_controller(sources: list[Union[str, int]],
-                                yolo_model_name: str,
-                                max_queue_size: int = None,
-                                fps: int = 15,
-                                **kwargs) -> VideoFrameController:
+def initialize_frame_controller(config: VideoFrameControllerConfig) -> VideoFrameController:
     """
-    Initializes the camera resources and returns the video frame initializer.
-        Args:
-            sources (Union[str, int]):
-                - If `int`, the camera device index from which to read frames.
-                - If `str`, a path to a video file on the filesystem.
-            max_queue_size: Maximum number of frames to buffer in the queue (per source).
-            yolo_model_name (str): Name of the YOLO model to use for object detection.
-            fps: Desired frames per second for reading from each source.
-
-
-            **kwargs:
-                Additional parameters that are passed directly to the
-                `VideoProcessor` constructor. Common options include:
-                - id (int): Unique identifier for the source, it is the path of a video stream or an integer for a camera stream, used by opencv.VideoStream.
-                - yolo (str): Path or identifier of the YOLO model.
-
-                [optional]:
-                - face_recogniser_threshold (float): Threshold for face recognition, defaults to 0.5.
-                - scale_size (int): Desired scale size for processing (default, 100 which means 'no scale', alias: 100% of the image).
-                - batch_size (int): Number of frames to batch process, defaults to 1.
-                - timeout (float): Timeout in seconds for queue operations, defaults to 0.1, in FrameSource raise queue.Full and skip the frame, in FrameController raise queue.Empty.
-                - fps (int): Desired frames per second, defaults to 30.
-                - device (str): Hardware device to run processing on (default device is cuda if available, mps if available, else cpu).
-                - view (bool): If True, it shows the captured frames and yolo's annotated frames.
-                - face_recogniser_threshold: 0.5 (default) - threshold for face recognition.
-                - motion_detector_threshold: 0.5 (default) - threshold for motion detection.
-                - motion_detector_min_area: 500 (default) - minimum area in pixel for motion detection.
-                - motion_detector: "mog2" (default) - motion detector algorithm to use, mog2 or opticalFlow
-        Returns:
-            VideoFrameController:
-                A newly created `VideoFrameController` containing all QueuedFrameSource.
+    Initialize the frame controller with the given configuration.
     """
     vpfcf = VideoProcessorFrameControllerFactory()
-    controller = vpfcf.initializer(sources,
-                                   yolo=yolo_model_name,
-                                   max_queue_size=max_queue_size,
-                                   fps=fps,
-                                   **kwargs)
+
+    controller = vpfcf.initializer(config)
     return controller

@@ -8,22 +8,48 @@ files:
   basedir_enroll_path: "./registered_faces"
 
 frame_controller:
-  sources: [[0, 'camera0']]
-  device: "cpu"
-  yolo_model_name: "yolo11n.pt"
   max_queue_size: null
-  fps: 30
-  timeout: 0.1
-  scale_size: 100
-  face_recogniser_threshold: 0.5
-  motion_detector_threshold: 0.5
-  motion_detector_min_area: 500
-  motion_detector: "mog2" # mog2 or optical_flow
-  view: true
+  sources:
+    - id: 0
+      source: 0
+      name: 'camera0'
+      device: "cpu"
+      yolo: "yolo11n.pt"
+      fps: 30
+      timeout: 0.1
+      scale_size: 100
+      face_recogniser_threshold: 0.5
+      motion_detector_threshold: 0.5
+      motion_detector_min_area: 500
+      motion_detector: "mog2" # mog2 or optical_flow
+      view: true
 
-fake_camera_mode: false # fakes video to cameras, useful for testing and debugging while inserting information into the database
-
-
+    - id: 1
+      source: 'datasets/WiseNET/set_1/video1_1.avi'
+      name: 'camera_1_Set5'
+      device: "cpu"
+      yolo: "yolo11n.pt"
+      fps: 30
+      timeout: 0.1
+      scale_size: 100
+      face_recogniser_threshold: 0.5
+      motion_detector_threshold: 0.5
+      motion_detector_min_area: 500
+      motion_detector: "mog2" # mog2 or optical_flow
+      view: true
+    - id: 2
+      source: 'datasets/WiseNET/set_1/video1_2.avi'
+      name: 'camera_1_Set5'
+      device: "cpu"
+      yolo: "yolo11n.pt"
+      fps: 30
+      timeout: 0.1
+      scale_size: 100
+      face_recogniser_threshold: 0.5
+      motion_detector_threshold: 0.5
+      motion_detector_min_area: 500
+      motion_detector: "mog2" # mog2 or optical_flow
+      view: true
 logger:
     level: "DEBUG"
     format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
