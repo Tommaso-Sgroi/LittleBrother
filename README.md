@@ -8,8 +8,9 @@
 - [x] Face recognition
 - [x] Send picutes to users (GIF or JPEG)
 - [x] Divide the system in modules
-- [ ] ~~Design the multiprocess pipeline~~
 - [x] Implement the pipeline
 - [x] Simulate the Camera Network Environment
-- [ ] Create a main process to handle the identification and the bot
+- [x] Create a main process to handle the identification and the bot
 - [x] Profiling and performance optimization
+
+Roadmap completed 💪🏻🔥🫡
