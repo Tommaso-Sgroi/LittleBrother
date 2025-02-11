@@ -55,6 +55,7 @@ class CommandName:
     CHANGE_ACCESS = 'change-access'
     REMOVE_PERSON_ENROLLMENT = 'remove-p-e'
     ABORT = 'abort'
+    ANSWER_ENROLL_YES_NO = 'answer-enroll-yes-no'
 
     @staticmethod
     def join_data(*data) -> str:
@@ -164,12 +165,9 @@ def send_help(message):
                      "\t/start - Start the bot\n" + \
                      "\t/help - Show this message\n" + \
                      "\t/auth - Authenticate with your given access token\n" + \
-                     "\t/enroll [name] - Enroll new person in the system\n" + \
-                     "\t/select - Select a camera for give/remove access the person\n" + \
-                     "\t/list - List all the people enrolled in the system\n" + \
-                     "\t/remove [name] - Remove a person from the system\n" + \
-                     "\t/pedit [name] - edit a person name enrolled into the system" + \
-                     "\t/cedit [#camera] - edit a camera name\n" + \
+                     "\t/enroll - Enroll new person in the system\n" + \
+                     "\t/list - List all the people enrolled in the system and manage their accesses\n" + \
+                     "\t/remove - Remove a person from the system\n" + \
                      "")
 
 
@@ -181,9 +179,12 @@ def auth_user(message):
         if msg.text == auth_token:
             user_id = msg.from_user.id
             # user_name = message.from_user.username
-            with DB() as db:
-                db.add_authed_user(user_id)
-                bot.send_message(msg.chat.id, "You are now authenticated")
+            try:
+                with DB() as db:
+                    db.add_authed_user(user_id)
+                    bot.send_message(msg.chat.id, "You are now authenticated")
+            except Exception as e:
+                bot.send_message(msg.chat.id, f"Cannot add authenticated user: {str(e)}")
         else:
             bot.send_message(msg.from_user.id, "Wrong token")
 
@@ -264,11 +265,17 @@ def select_person(call: types.CallbackQuery):  # <- passes a CallbackQuery type 
     """Show person information, about his access to the rooms"""
     assert len(call.data) == 3
     username, camera_id, listed = call.data
+    try:
+        with DB() as db:
+            listed = 'w' if listed == 'b' else 'b'
+            db.update_person_access_list(username, int(camera_id), listed)
+            db.update_person_access_list(username, int(camera_id), listed)
+            access_list = db.get_person_rooms_access_list(username)
+    except Exception as e:
+        bot.send_message(call.message.id, f'Error: {str(e)}')
+        logger.error(f'Cannot update person access list %s:', e)
+        return
 
-    with DB() as db:
-        listed = 'w' if listed == 'b' else 'b'
-        db.update_person_access_list(username, int(camera_id), listed)
-        access_list = db.get_person_rooms_access_list(username)
     bot.answer_callback_query(call.id, "")
     bot.delete_message(call.message.chat.id, call.message.id)
     query_type = CommandName.CHANGE_ACCESS
@@ -322,14 +329,13 @@ def remove_person(call: types.CallbackQuery):
                     os.remove(os.path.join(basedir_enroll_path, enroll))
                     break
     except Exception as e:
-        bot.answer_callback_query(call.id, f'Error: {str(e)}')
+        bot.send_message(call.message.id, f'Error: {str(e)}')
         logger.error(f'Cannot delete person from the enrollment %s:', e)
         return
     bot.answer_callback_query(call.id, f'{username} removed from the system')
     # this is a very bad approach, but it's a workaround for now
     call.message.from_user.id = call.from_user.id
     remove_person_list(call.message)
-
 
 # ------------------- ENROLLMENT -------------------
 @bot.message_handler(commands=['enroll'])
@@ -405,9 +411,7 @@ def enroll_photo_from_user(message, enroll_name: str, override=False, retries=2)
         # update the db with the new person
         if not override:
             with DB() as db:
-                # TODO db do not raise any exception if the person is already enrolled
                 db.add_enrolled_person(enroll_name)
-            # db.add_person_room_access(enroll_name, camera_id=camera_id, listed=scope)  # TODO change the placeholder
         bot.send_message(message.chat.id, f'{enroll_name} enrolled into the system')
     except Exception as e:
         bot.send_message(message.chat.id, f'Invalid image {str(e)}, try again')

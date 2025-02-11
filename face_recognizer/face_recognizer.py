@@ -86,6 +86,8 @@ class FaceRecognizer(Logger):
 
         # Save embedding to individual file
         file_path = os.path.join(self.faces_dir, f"{label}.npy")
+        if os.path.isfile(file_path):
+            os.remove(file_path)
         np.save(file_path, embedding_np)
 
         self.enrolled_embeddings = torch.cat([self.enrolled_embeddings, embedding])

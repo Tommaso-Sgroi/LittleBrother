@@ -6,6 +6,10 @@ def get_database(db_path, *, dropdb = False):
 
 UNKNOWN_SPECIAL_USER = u'Unknown\U00002753'
 
+def raise_error(e:Exception, context: str):
+    e.add_note(context)
+    raise e
+
 class TBDatabase(l.Logger):
     """
     Classe per la gestione di un database SQLite3 per il bot Telegram.
@@ -41,7 +45,6 @@ class TDBAtomicConnection(l.Logger):
     This class is necessary to handle the fact that the telegram bot spawn multiple threads and
      sqlite3 doesn't really like that.
     """
-    # TODO no exception raising
     def __init__(self, db_path: str):
         super().__init__(self.__class__.__name__)
         self.conn = sqlite3.connect(db_path)
@@ -90,6 +93,7 @@ class TDBAtomicConnection(l.Logger):
             self.conn.commit()
         except Exception as e:
             self.logger.error("Error during database deletion: %s", e)
+            raise_error(e, "Error during database deletion")
         finally:
             cursor.close()
 
@@ -137,6 +141,7 @@ class TDBAtomicConnection(l.Logger):
             self.conn.commit()
         except Exception as e:
             self.logger.error("Error during database creation: %s", e)
+            raise_error(e, "Error during database creation")
         finally:
             cursor.close()
 
@@ -152,6 +157,7 @@ class TDBAtomicConnection(l.Logger):
             return bool(listed)
         except Exception as e:
             self.logger.error("Error during access list selection: %s", e)
+            raise_error(e, "Cannot check access to room %s with user %s".format(camera_id, user_name))
         finally:
             cursor.close()
 
@@ -163,6 +169,7 @@ class TDBAtomicConnection(l.Logger):
             return camera_name
         except Exception as e:
             self.logger.error("Error during camera name selection: %s", e)
+            raise_error(e, "Error during camera name selection %s".format(camera_id))
         finally:
             cursor.close()
 
@@ -174,7 +181,8 @@ class TDBAtomicConnection(l.Logger):
             user_count = cursor.fetchone()[0]
             return bool(user_count)
         except Exception as e:
-            self.logger.error("Error during user selection: %s", e)
+            self.logger.error("Cannot check user existence: %s", e)
+            raise_error(e, "Cannot check user existence %s".format(user_id))
         finally:
             cursor.close()
 
@@ -185,6 +193,7 @@ class TDBAtomicConnection(l.Logger):
             return cursor.fetchall()
         except Exception as e:
             self.logger.error("Error during user selection: %s", e)
+            raise_error(e, "Error during user selection")
         finally:
             cursor.close()
 
@@ -199,7 +208,8 @@ class TDBAtomicConnection(l.Logger):
             camera_count = cursor.fetchone()[0]
             return bool(camera_count)
         except Exception as e:
-            self.logger.error("Error during camera selection: %s", e)
+            self.logger.error("Cannot check if camera exists: %s", e)
+            raise_error(e, "Cannot check if camera exists: %s".format(camera_id))
         finally:
             cursor.close()
 
@@ -210,6 +220,7 @@ class TDBAtomicConnection(l.Logger):
             return cursor.fetchall()
         except Exception as e:
             self.logger.error("Error during camera selection: %s", e)
+            raise_error(e, "Error during camera selection")
         finally:
             cursor.close()
 
@@ -221,7 +232,8 @@ class TDBAtomicConnection(l.Logger):
             user_count = cursor.fetchone()[0]
             return bool(user_count)
         except Exception as e:
-            self.logger.error("Error during user access list selection: %s", e)
+            self.logger.error("Cannot check if the person is already enrolled: %s", e)
+            raise_error(e, "Cannot check if the person is already enrolled: %s".format(user_name))
         finally:
             cursor.close()
 
@@ -236,6 +248,7 @@ class TDBAtomicConnection(l.Logger):
             return cursor.fetchall()
         except Exception as e:
             self.logger.error("Error during user access list selection: %s", e)
+            raise_error(e, "Error during user access list selection %s".format(user_name))
         finally:
             cursor.close()
 
@@ -247,6 +260,7 @@ class TDBAtomicConnection(l.Logger):
             return [name[0] for name in names]
         except Exception as e:
             self.logger.error("Error fetching all user names from access list: %s", e)
+            raise_error(e, "Error fetching all user names from access list")
         finally:
             cursor.close()
     # Add to db
@@ -256,6 +270,7 @@ class TDBAtomicConnection(l.Logger):
             cursor.execute("INSERT INTO Users VALUES (?)", (user_id,))
         except Exception as e:
             self.logger.error("Error during user insertion: %s", e)
+            raise_error(e, "Error during user insertion: %s".format(user_id))
         finally:
             cursor.close()
 
@@ -266,6 +281,7 @@ class TDBAtomicConnection(l.Logger):
                            (user_name, camera_id, listed))
         except Exception as e:
             self.logger.error("Error during user insertion: %s", e)
+            raise_error(e, "Error during user insertion: username %s, camera_id %s, listed %s".format(user_name, camera_id, listed))
         finally:
             cursor.close()
 
@@ -276,6 +292,7 @@ class TDBAtomicConnection(l.Logger):
             cursor.execute("INSERT INTO AccessList (user_name, camera_id) SELECT DISTINCT (user_name), ? FROM AccessList", (camera_id,))
         except Exception as e:
             self.logger.error("Error during camera insertion: %s", e)
+            raise_error(e, "Error during camera insertion: %s %s".format(camera_id, camera_name))
         finally:
             cursor.close()
 
@@ -286,6 +303,7 @@ class TDBAtomicConnection(l.Logger):
             cursor.execute("INSERT INTO AccessList (user_name, camera_id, listed) SELECT ?, camera_id, 'b' FROM Cameras", (user_name,))
         except Exception as e:
             self.logger.error("Cannot enroll person '%s' user insertion: %s", user_name, e)
+            raise_error(e, "Cannot enroll person '%s' user insertion".format(user_name))
         finally:
             cursor.close()
 
@@ -296,6 +314,7 @@ class TDBAtomicConnection(l.Logger):
             cursor.execute("UPDATE AccessList SET listed=? WHERE user_name=? AND camera_id=?", (listed, user_name, camera_id))
         except Exception as e:
             self.logger.error("Error during listed update: %s", e)
+            raise_error(e, "Error during listed update: %s %s %s".format(user_name, camera_id, listed))
         finally:
             cursor.close()
 
@@ -305,6 +324,7 @@ class TDBAtomicConnection(l.Logger):
             cursor.execute("UPDATE AccessList SET user_name=? WHERE user_name=?", (new_user_name, old_user_name))
         except Exception as e:
             self.logger.error("Error during user name update: %s", e)
+            raise_error(e, "Error during user name update: %s %s".format(old_user_name, new_user_name))
         finally:
             cursor.close()
 
@@ -314,6 +334,7 @@ class TDBAtomicConnection(l.Logger):
             cursor.execute("UPDATE Cameras SET camera_name=? WHERE camera_id=?", (new_room_name, camera_id))
         except Exception as e:
             self.logger.error("Error during room name update: %s", e)
+            raise_error(e, "Error during room name update: %s %s".format(camera_id, new_room_name))
         finally:
             cursor.close()
 
@@ -323,6 +344,7 @@ class TDBAtomicConnection(l.Logger):
             cursor.execute("UPDATE Cameras SET camera_name=? WHERE camera_id=?", (new_camera_name, camera_id))
         except Exception as e:
             self.logger.error("Error during camera name update: %s", e)
+            raise_error(e, "Error during camera name update: %s %s".format(camera_id, new_camera_name))
         finally:
             cursor.close()
 
@@ -333,6 +355,7 @@ class TDBAtomicConnection(l.Logger):
             cursor.execute("DELETE FROM AccessList WHERE user_name=?;", [user_name])
         except Exception as e:
             self.logger.error("Error during enrolled person '%s' deletion: %s", user_name, e)
+            raise_error(e, "Error during enrolled person '%s' deletion".format(user_name))
         finally:
             cursor.close()
 
@@ -342,6 +365,7 @@ class TDBAtomicConnection(l.Logger):
             cursor.execute("DELETE FROM Cameras WHERE camera_id=?", (camera_id,))
         except Exception as e:
             self.logger.error("Error during camera deletion: %s", e)
+            raise_error(e, "Error during camera deletion: %s".format(camera_id))
         finally:
             cursor.close()
 
@@ -352,6 +376,7 @@ class TDBAtomicConnection(l.Logger):
             cursor.execute("DELETE FROM Users WHERE user_id=?", (user_id,))
         except Exception as e:
             self.logger.error("Error during user deletion: %s", e)
+            raise_error(e, "Error during user deletion: %s".format(user_id))
         finally:
             cursor.close()
 
