@@ -1,7 +1,7 @@
 from queue import Empty
 from time import sleep
 
-from main.video_processor import VideoProcessorFrameControllerFactory
+from camera.video_processor import VideoProcessorFrameControllerFactory
 from local_utils.view import view
 from local_utils.logger import init_logger
 import logging

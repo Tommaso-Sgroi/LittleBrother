@@ -4,7 +4,7 @@ from time import sleep
 from db.db_lite import TBDatabase, TDBAtomicConnection
 from local_utils.config import Config, load_config
 from local_utils.logger import get_logger, init_logger
-from main.video_processor import initialize_frame_controller
+from camera.video_processor import initialize_frame_controller
 import signal
 
 logger = get_logger(__name__)
@@ -16,10 +16,11 @@ def init_database(config: Config):
     db = TBDatabase(config.db_path, drop_db=config.drop_db)
 
     cameras_names = [(vfc.id, vfc.name) for vfc in config.video_frame_controller.sources]
+    cameras = [c for c, _ in cameras_names]
+    names = [n for _, n in cameras_names]
 
     with db() as db_conn:
-        for camera_id, camera_name in cameras_names:
-            db_conn.add_camera(camera_id, camera_name)
+        db_conn.setup_database(cameras, names)
     return db
 
 
@@ -59,7 +60,7 @@ def process_detections(database, frame_controller):
                 for camera_id, person, img in detection:
                     if check_access(person, camera_id, db):
                         continue
-                    logger.critical(f"Person {person or 'Unknown'} has no access to room {camera_id}")
+                    logger.critical(f"Person %s has no access to room %s", person or 'Unknown', camera_id)
                     camera_name = db.get_camera_name(camera_id)
                     t_bot.send_detection_img(img, person_detected_name=person or "Unknown", access_camera_name=camera_name)
     frame_controller.stop_sources()
@@ -74,7 +75,6 @@ def run_app():
     detections_thread = Thread(target=process_detections, args=(database, frame_controller), daemon=False)
     
     bot_thread.start()
-    sleep(5)
     detections_thread.start()
     bot_thread.join()
     detections_thread.join()

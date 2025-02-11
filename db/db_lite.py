@@ -55,6 +55,26 @@ class TDBAtomicConnection(l.Logger):
     def get_cursor(self):
         return self.conn.cursor()
 
+    def setup_database(self, cameras_ids: list[int], cameras_names: list[str]):
+        assert len(cameras_names) == len(cameras_ids)
+        # setup special users
+        cameras_ids_names = self.get_cameras()
+
+        db_camera_ids = {c_id_n[0] for c_id_n in cameras_ids_names}
+        # db_camera_names = {c_id_n[1] for c_id_n in cameras_ids_names}
+        cameras_ids = {c_id for c_id in cameras_ids}
+        for camera_id, camera_name in zip(cameras_ids, cameras_names):
+            if camera_id not in db_camera_ids:
+                self.add_camera(camera_id, camera_name)
+                db_camera_ids.add(camera_id)
+            self.update_camera_name(camera_id, camera_name)
+
+        remove_cameras = db_camera_ids - cameras_ids
+        for camera_id in remove_cameras:
+            self.delete_camera(camera_id)
+
+        return
+
     def drop_db(self):
         cursor = self.get_cursor()
         try:
@@ -180,7 +200,7 @@ class TDBAtomicConnection(l.Logger):
         finally:
             cursor.close()
 
-    def get_cameras(self):
+    def get_cameras(self) -> list[int, str]:
         cursor = self.get_cursor()
         try:
             cursor.execute("SELECT camera_id, camera_name FROM Cameras")
