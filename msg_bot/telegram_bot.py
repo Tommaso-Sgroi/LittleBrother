@@ -13,16 +13,15 @@ from time import time  # NEW: Import time for cooldown check
 
 import local_utils.config
 from local_utils.logger import get_logger
-from msg_bot.utils import require_auth, empty_answer_callback_query, override_call_message_id_with_from_user_id
+from msg_bot.utils import require_auth, empty_answer_callback_query, override_call_message_id_with_from_user_id, \
+    authenticate_user
 from db.db_lite import TBDatabase, get_database
 from face_recognizer.face_recognizer import FaceRecognizer
 from io import BytesIO
 from PIL import Image
 import cv2
 
-'''
-This code is a bit rushed and must, i repeat MUST, be refactored to be at least something apparently good
-'''
+
 config = local_utils.config.config
 
 if config is None:
@@ -55,6 +54,7 @@ class CommandName:
     CHANGE_ACCESS = 'change-access'
     REMOVE_PERSON_ENROLLMENT = 'remove-p-e'
     ABORT = 'abort'
+    ANSWER_ENROLL_YES_NO = 'answer-enroll-yes-no'
 
     @staticmethod
     def join_data(*data) -> str:
@@ -74,7 +74,7 @@ class CommandName:
         return markup
 
 
-def filter_callback_query(call: types.CallbackQuery, query_type: str) -> bool:
+def filter_callback_query(call: types.CallbackQuery, query_type: str, override_message_id_with_from_user=False) -> bool:
     data = CommandName.decompose(call.data)
     if query_type == data[0]:
         del data[0]
@@ -164,12 +164,9 @@ def send_help(message):
                      "\t/start - Start the bot\n" + \
                      "\t/help - Show this message\n" + \
                      "\t/auth - Authenticate with your given access token\n" + \
-                     "\t/enroll [name] - Enroll new person in the system\n" + \
-                     "\t/select - Select a camera for give/remove access the person\n" + \
-                     "\t/list - List all the people enrolled in the system\n" + \
-                     "\t/remove [name] - Remove a person from the system\n" + \
-                     "\t/pedit [name] - edit a person name enrolled into the system" + \
-                     "\t/cedit [#camera] - edit a camera name\n" + \
+                     "\t/enroll - Enroll new person in the system\n" + \
+                     "\t/list - List all the people enrolled in the system and manage their accesses\n" + \
+                     "\t/remove - Remove a person from the system\n" + \
                      "")
 
 
@@ -181,9 +178,12 @@ def auth_user(message):
         if msg.text == auth_token:
             user_id = msg.from_user.id
             # user_name = message.from_user.username
-            with DB() as db:
-                db.add_authed_user(user_id)
-                bot.send_message(msg.chat.id, "You are now authenticated")
+            try:
+                with DB() as db:
+                    db.add_authed_user(user_id)
+                    bot.send_message(msg.chat.id, "You are now authenticated")
+            except Exception as e:
+                bot.send_message(msg.chat.id, f"Cannot add authenticated user: {str(e)}")
         else:
             bot.send_message(msg.from_user.id, "Wrong token")
 
@@ -264,11 +264,17 @@ def select_person(call: types.CallbackQuery):  # <- passes a CallbackQuery type 
     """Show person information, about his access to the rooms"""
     assert len(call.data) == 3
     username, camera_id, listed = call.data
+    try:
+        with DB() as db:
+            listed = 'w' if listed == 'b' else 'b'
+            db.update_person_access_list(username, int(camera_id), listed)
+            db.update_person_access_list(username, int(camera_id), listed)
+            access_list = db.get_person_rooms_access_list(username)
+    except Exception as e:
+        bot.send_message(call.message.id, f'Error: {str(e)}')
+        logger.error(f'Cannot update person access list %s:', e)
+        return
 
-    with DB() as db:
-        listed = 'w' if listed == 'b' else 'b'
-        db.update_person_access_list(username, int(camera_id), listed)
-        access_list = db.get_person_rooms_access_list(username)
     bot.answer_callback_query(call.id, "")
     bot.delete_message(call.message.chat.id, call.message.id)
     query_type = CommandName.CHANGE_ACCESS
@@ -322,14 +328,13 @@ def remove_person(call: types.CallbackQuery):
                     os.remove(os.path.join(basedir_enroll_path, enroll))
                     break
     except Exception as e:
-        bot.answer_callback_query(call.id, f'Error: {str(e)}')
+        bot.send_message(call.message.id, f'Error: {str(e)}')
         logger.error(f'Cannot delete person from the enrollment %s:', e)
         return
     bot.answer_callback_query(call.id, f'{username} removed from the system')
     # this is a very bad approach, but it's a workaround for now
     call.message.from_user.id = call.from_user.id
     remove_person_list(call.message)
-
 
 # ------------------- ENROLLMENT -------------------
 @bot.message_handler(commands=['enroll'])
@@ -340,19 +345,31 @@ def enroll_person(message):
     bot.register_next_step_handler(message, enroll_user)
 
 
+@bot.callback_query_handler(func=lambda call: filter_callback_query(call, CommandName.ANSWER_ENROLL_YES_NO))
+def get_override_answer(call: types.CallbackQuery):
+    tmp_message_id = call.message.id
+    call.message.from_user.id = call.from_user.id
+    if not authenticate_user(call.message, DB, bot):
+        return
+    call.message.id = tmp_message_id
+    empty_answer_callback_query(call, bot)
+    if not call.data:
+        bot.send_message(call.message.id, 'Nothing typed, aborting')
+        return
+    answer = call.data[0].lower()
+    enroll_name = call.data[1]
+    if answer in ['y', 'yes']:
+        enroll_user(call.message, True, enroll_name)
+    elif answer in ['n', 'no']:
+        bot.send_message(call.message.chat.id, 'No override applied, operation aborted')
+    else:
+        bot.send_message(call.message.chat.id, 'Invalid answer, select [yes/y] or [no/n]')
+        bot.register_next_step_handler(call.message, get_override_answer, enroll_name)
+    bot.delete_message(call.message.chat.id, call.message.id)
+
 def enroll_user(message, override_enrollment=False, enroll_person_name=''):
-    def get_override_answer(msg, enroll_name):
-        if msg.text is None:
-            bot.send_message(msg.chat.id, 'Nothing typed, aborting')
-            return
-        msg.text = msg.text.lower()
-        if msg.text in ['y', 'yes']:
-            enroll_user(msg, True, enroll_name)
-        elif msg.text in ['n', 'no']:
-            bot.send_message(msg.chat.id, 'No override applied, operation aborted')
-        else:
-            bot.send_message(msg.chat.id, 'Invalid answer, type [yes/y] or [no/n]')
-            bot.register_next_step_handler(msg, get_override_answer, enroll_name)
+    if not authenticate_user(message, DB, bot):
+        return
 
     if message.text is None:
         bot.send_message(message.chat.id, 'Nothing typed, aborting')
@@ -367,17 +384,24 @@ def enroll_user(message, override_enrollment=False, enroll_person_name=''):
 
     with DB() as db:
         if not override_enrollment and db.person_already_enrolled(enroll_person_name):
+            markup = telebot.util.quick_markup({
+                answ: {'callback_data': CommandName.join_data(CommandName.ANSWER_ENROLL_YES_NO, answ, enroll_person_name)} for answ in ['Yes', 'No']
+            }, row_width=2)
+
             bot.send_message(message.chat.id,
-                             f'{enroll_person_name} already enrolled into the system, do you want to override the image? [y/n]')
-            bot.register_next_step_handler(message, get_override_answer, enroll_person_name)
+                             f'{enroll_person_name} already enrolled into the system, do you want to override it with the new image?',
+                             reply_markup=markup
+                             )
             return
     bot.send_message(message.chat.id, f"Send a photo with {enroll_person_name} face to enroll in the system")
     bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_person_name,
                                    override=override_enrollment)
 
 
-# def enroll_photo_from_user(message, enroll_name:str, scope:str, camera_id:int, retries=3):
 def enroll_photo_from_user(message, enroll_name: str, override=False, retries=2):
+    if not authenticate_user(message, DB, bot):
+        return
+
     fr = FaceRecognizer()
     # it's ok to instantiate everytime the face recognizer, since we are calling it few times in
     # the scenario, and purpose, of this bot
@@ -401,16 +425,20 @@ def enroll_photo_from_user(message, enroll_name: str, override=False, retries=2)
     # enroll faces
     try:
         bot.send_message(message.chat.id, 'Enrolling face, could take a while...')
+        n_faces = fr.get_faces(image)
+        if not n_faces:
+            raise Exception('no face detected')
+        elif n_faces[0].shape[0] > 1:
+            raise Exception('more than one face detected')
+
         fr.enroll_face(image, enroll_name)
         # update the db with the new person
         if not override:
             with DB() as db:
-                # TODO db do not raise any exception if the person is already enrolled
                 db.add_enrolled_person(enroll_name)
-            # db.add_person_room_access(enroll_name, camera_id=camera_id, listed=scope)  # TODO change the placeholder
         bot.send_message(message.chat.id, f'{enroll_name} enrolled into the system')
     except Exception as e:
-        bot.send_message(message.chat.id, f'Invalid image {str(e)}, try again')
+        bot.send_message(message.chat.id, f'Error during enrollment: {str(e)}\nRetry!')
         # bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, scope=scope, camera_id=camera_id, retries=retries-1)
         bot.register_next_step_handler(message, enroll_photo_from_user, enroll_name=enroll_name, retries=retries - 1)
     return
@@ -510,11 +538,23 @@ class TelegramBotThread(Thread):
         bot.stop_bot()
 
 
+'''
+This code is a bit rushed and must, i repeat MUST, be refactored to be at least something apparently good.
+Really wish that no one will ever see this code, it's a shame. Also i'm sorry for whoever will work on this code.
+Can i be forgiven? I hope so.
+Never been so ashamed and amused of my code in the same time, but i had to do this whatever it takes.
+'''
+
+
 if __name__ == '__main__':
     DB = get_database('database.db', dropdb=False)
-    with DB() as db:
-        db.add_camera(1, 'camera1')
-        db.add_camera(2, 'camera2')
-        db.add_camera(3, 'camera3')
-        db.add_camera(4, 'camera4')
+    try:
+        with DB() as db:
+            db.add_camera(1, 'camera1')
+            db.add_camera(2, 'camera2')
+            db.add_camera(3, 'camera3')
+            db.add_camera(4, 'camera4')
+    except Exception as e:
+        logger.error(f'Something went wrong: {e}')
+
     start_bot(0, skip_pending=True)

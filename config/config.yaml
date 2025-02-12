@@ -12,7 +12,7 @@ frame_controller:
   sources:
     - id: 0
       source: 0
-      name: 'camera0'
+      name: 'webcam'
       device: "cpu"
       yolo: "yolo11n.pt"
       fps: 30
@@ -26,7 +26,7 @@ frame_controller:
 
     - id: 1
       source: 'datasets/WiseNET/set_1/video1_1.avi'
-      name: 'camera_1_Set5'
+      name: 'camera_1_set_5'
       device: "cpu"
       yolo: "yolo11n.pt"
       fps: 30
@@ -37,9 +37,10 @@ frame_controller:
       motion_detector_min_area: 500
       motion_detector: "mog2" # mog2 or optical_flow
       view: true
+
     - id: 2
       source: 'datasets/WiseNET/set_1/video1_2.avi'
-      name: 'camera_1_Set5'
+      name: 'camera_2_set_5'
       device: "cpu"
       yolo: "yolo11n.pt"
       fps: 30
